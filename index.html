@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Study Dashboard</title>
+    <link rel="stylesheet" href="src/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+    <div class="app-layout">
+        <!-- Persistent Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <i class='bx bx-check-square'></i> Student OS
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-item">
+                    <a href="index.html" class="sidebar-link active">
+                        <i class='bx bx-calendar'></i> Schedule View
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="analytics.html" class="sidebar-link">
+                        <i class='bx bx-bar-chart-alt-2'></i> Insights Hub
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer" style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                <button id="api-settings-btn" class="sidebar-link" style="width: 100%; background: transparent; border: none; cursor: pointer; text-align: left; transition: all 0.3s;">
+                    <i class='bx bx-key'></i> <span id="api-key-label">Setup AI</span>
+                </button>
+            </div>
+        </aside>
+
+        <div class="app-container">
+            <header class="app-header">
+                <div class="header-content">
+                    <h1>Exam Dashboard</h1>
+                    <p>Track your schedule and stay focused on action items.</p>
+                </div>
+                
+                <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
+                    <button id="smart-import-btn" class="secondary-btn" title="AI Import">
+                        <i class='bx bx-sparkles'></i> Smart Import
+                    </button>
+                    <button id="open-vault-btn" class="icon-btn" title="Special Dates"
+                        style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px;">
+                        <i class='bx bx-star'></i>
+                    </button>
+                    <button id="header-sync-btn" class="secondary-btn" title="Calendar Sync">
+                        <i class='bx bx-calendar-event'></i> Sync
+                    </button>
+                    <button id="add-exam-btn" class="primary-btn">
+                        <i class='bx bx-plus'></i> Add Exam
+                    </button>
+                </div>
+            </header>
+
+        <main class="dashboard">
+            <!-- Time Filters Control Bar -->
+            <div class="filter-bar" style="display: flex; gap: 12px; background: var(--surface-color); padding: 12px 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); border: 1px solid var(--border-color); margin-bottom: 24px; align-items: center;">
+                <span class="filter-label" style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; flex-shrink: 0; white-space: nowrap;"><i class='bx bx-filter'></i> Focus View:</span>
+                <button class="filter-btn active" data-filter="all" style="background: var(--primary-color); color: #000; border: none; padding: 6px 16px; border-radius: 20px; font-weight: 600; cursor: pointer;">All Upcoming</button>
+                <button class="filter-btn" data-filter="today" style="background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 16px; border-radius: 20px; font-weight: 500; cursor: pointer;">Today</button>
+                <button class="filter-btn" data-filter="week" style="background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 16px; border-radius: 20px; font-weight: 500; cursor: pointer;">This Week</button>
+                <div class="custom-range-picker" style="margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                    <input type="date" id="filter-start-date" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-primary); font-family: 'Inter';">
+                    <span class="range-separator" style="color: var(--text-secondary)">to</span>
+                    <input type="date" id="filter-end-date" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-primary); font-family: 'Inter';">
+                    <button class="secondary-btn" id="apply-custom-filter-btn" style="padding: 6px 12px;">Apply Range</button>
+                </div>
+            </div>
+
+            <div class="closest-exam-section" id="closest-exam-section">
+                <!-- Highlighted closest exam will go here -->
+            </div>
+
+            <div class="exams-grid" id="exams-grid">
+                <!-- Exam cards will be rendered here -->
+            </div>
+
+            <!-- Special Dates Vault (Hidden Sidebar) -->
+            <aside id="special-vault" class="vault-sidebar">
+                <div class="vault-header">
+                    <h2><i class='bx bx-star'></i> Special Dates</h2>
+                    <button class="icon-btn close-vault-btn" id="close-vault-btn"><i class='bx bx-x'></i></button>
+                </div>
+                <p class="vault-desc">Moed C and Special exams are kept here until needed to keep your main dashboard
+                    clean.</p>
+                <div class="vault-grid" id="vault-grid">
+                    <!-- Vaulted cards rendered here -->
+                </div>
+            </aside>
+
+        </main>
+    </div>
+
+    <!-- Smart Import Modal -->
+    <div id="import-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Smart Import Exams</h2>
+                <button class="close-btn" id="close-import-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <div class="form-group">
+                <label for="import-text">Paste Exam Schedule</label>
+                <textarea id="import-text" rows="6"
+                    placeholder="Paste text containing dates, times, and exam names...&#10;Example:&#10;Calculus III - 15/04/2026 at 14:00&#10;May 2nd 10am: Physics Midterm"></textarea>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 8px;">Our AI-powered parser will
+                    automatically extract the details.</p>
+            </div>
+
+            <div id="import-preview-section" style="display: none;">
+                <h3 style="margin: 16px 0 8px; font-size: 1rem;">Detected Exams (<span id="detected-count">0</span>)
+                </h3>
+                <div id="import-preview-list"
+                    style="max-height: 200px; overflow-y: auto; background: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color); padding: 8px;">
+                    <!-- Preview items go here -->
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; gap: 12px;">
+                <button id="parse-text-btn" class="secondary-btn full-width">Preview</button>
+                <div id="import-actions" style="display: none; width: 100%; gap: 12px;">
+                    <button id="back-to-edit-btn" class="secondary-btn" style="flex: 1;">Back to Edit</button>
+                    <button id="confirm-import-btn" class="primary-btn" style="flex: 2;">Import Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Exam Modal -->
+    <div id="exam-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Exam</h2>
+                <button class="close-btn" id="close-modal-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <form id="exam-form">
+                <div class="form-group">
+                    <label for="exam-title">Exam Title</label>
+                    <input type="text" id="exam-title" required placeholder="e.g., Advanced Mathematics" list="course-list">
+                    <datalist id="course-list">
+                        <!-- Options will be populated via JS -->
+                    </datalist>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label for="exam-date">Date</label>
+                        <input type="date" id="exam-date" required>
+                    </div>
+                    <div class="form-group" style="flex: 1.5;">
+                        <label for="exam-time">Time</label>
+                        <input type="time" id="exam-time">
+                    </div>
+                </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="exam-moed">Moed</label>
+                        <select id="exam-moed">
+                            <option value="">None</option>
+                            <option value="A">Moed A</option>
+                            <option value="B">Moed B</option>
+                            <option value="C">Moed C / Special</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Syllabus Topics (Preparation for Harvester)</label>
+                    <div style="padding: 12px; background: rgba(187, 134, 252, 0.05); border: 1px dashed var(--primary-color); border-radius: 8px; color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">
+                        <i class='bx bx-info-circle' style="color: var(--primary-color);"></i> Topics will be auto-generated by the Syllabus Harvester module in a future update.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Study Checklist</label>
+                    <div class="checklist-input-group">
+                        <input type="text" id="checklist-item-input" placeholder="Add a study topic...">
+                        <button type="button" id="add-checklist-item-btn" class="secondary-btn">Add</button>
+                    </div>
+                    <ul id="checklist-preview" class="checklist-preview">
+                        <!-- Preview checklist items here -->
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="primary-btn full-width">Save Exam</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Conflict Resolution Modal -->
+    <div id="conflict-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Resolve Schedule Conflict</h2>
+                <button class="close-btn" id="close-conflict-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <div style="padding-bottom: 16px;">
+                <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.95rem;">
+                    These exams overlap. Choose one as your <strong>Main Focus</strong>. The other will be marked as
+                    <strong>Delayed</strong> for Moed B/Special.<br><br>
+                    <small><em>Tip: Priority should be given to a repeating mandatory course (קורס חובה
+                            חוזר).</em></small>
+                </p>
+                <div id="conflict-options"
+                    style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                    <!-- Radio buttons will be injected here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-conflict-btn" class="primary-btn full-width">Confirm Main Focus</button>
+            </div>
+        </div>
+    </div>
+    <!-- Compare/Lift Modal for Stacked Cards -->
+    <div id="compare-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Exam Stack Details</h2>
+                <button class="close-btn" id="close-compare-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <div style="padding-bottom: 16px;">
+                <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem;">
+                    Here are the conflicting exams currently grouped in this stack.
+                </p>
+                <div id="compare-grid" class="exams-grid"
+                    style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                    <!-- Cards will be injected here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="switch-conflict-btn" class="secondary-btn"><i class='bx bx-transfer'></i> Switch
+                    Selection</button>
+                <button id="undo-conflict-btn" class="danger-btn"><i class='bx bx-undo'></i> Reset Conflict</button>
+                <button id="close-compare-footer-btn" class="primary-btn">Done</button>
+            </div>
+        </div>
+    </div>
+    <!-- Google Sync Review Modal -->
+    <div id="sync-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Google Calendar Sync</h2>
+                <button class="close-btn" id="close-sync-modal-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <div style="padding-bottom: 16px;">
+                <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.95rem;">
+                    The dashboard is the master. Syncing will overwrite events in your <strong>'Student OS - Test'</strong> calendar.
+                </p>
+                <div id="sync-review-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; background: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color); padding: 8px;">
+                    <!-- Sync items injected here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 12px;">
+                <button id="start-sync-btn" class="primary-btn full-width">Start Syncing</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./src/app.js?v=3"></script>
+    <script type="module" src="./src/google_sync.js"></script>
+    <script type="module" src="./src/api_modal_manager.js"></script>
+</body>
+
+</html>

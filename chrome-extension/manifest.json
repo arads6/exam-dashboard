@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Syllabus Harvester",
+  "version": "1.0",
+  "description": "Extracts syllabus data from BGU Moodle and sends it to Student OS.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["*://moodle.bgu.ac.il/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://moodle.bgu.ac.il/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf.worker.min.js",
+        "lib/mammoth.browser.min.js",
+        "content.js"
+      ]
+    },
+    {
+      "matches": [
+        "http://localhost:8080/*",
+        "http://127.0.0.1:8080/*"
+      ],
+      "js": ["courier.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/pdf.worker.min.js"],
+      "matches": ["*://moodle.bgu.ac.il/*"]
+    }
+  ]
+}

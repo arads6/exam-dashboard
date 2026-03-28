@@ -1,0 +1,13 @@
+# Credentials and Keys
+.env
+*.key
+keys.json
+secrets/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python/Node stuff
+__pycache__/
+node_modules/

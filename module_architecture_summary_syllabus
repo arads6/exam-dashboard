@@ -1,0 +1,91 @@
+# Module Architecture Summary (Student OS - Stage 7.7)
+
+This document provides a technical overview of the current system architecture, data structures, and feature states following the completion of Stage 7.
+
+## 1. Local Storage Schema
+
+All application data is consolidated in a single Local Storage key: `student_os_data`. The structure is partitioned into two primary "buckets": `courses` and `exams`.
+
+### Courses Bucket (`store.courses[]`)
+Each object in the `courses` array represents a persistent academic course, historically derived from a syllabus or manual entry.
+
+```javascript
+{
+  "id": "course_1711134567890",      // Unique ID (prefixed with 'course_')
+  "title": "Macroeconomics 2",       // Clean display name
+  "moodleName": "מקרו כלכלה 2 (א)",   // Original source name (from Moodle)
+  "nekaz": 4.5,                      // Credit points (null if TBD)
+  "isConfigured": true,              // Flag: sum(gradeComponents.weight) === 100
+  "lastSyllabusUpdate": "ISOString", // Date of last AI sync
+  "staffMetadata": {
+    "lecturer": "Dr. Cohen",
+    "ta": "Yossi Levi"
+  },
+  "gradeComponents": [
+    {
+       "name": "Final Exam",
+       "weight": 80,
+       "score": 85,                  // User-entered (null if not yet graded)
+       "isShield": false,
+       "minPassGrade": 60 
+    },
+    { "name": "Midterm", "weight": 20, "score": 90, "isShield": true }
+  ],
+  "topics": ["GDP", "Inflation"],     // Raw topic strings
+  "checklist": [                     // Checklist items derived from topics
+    { "text": "GDP", "completed": false }
+  ],
+  "date": "TBD",                     // Legacy compatibility fields
+  "time": "TBD"
+}
+```
+
+### Exams Bucket (`store.exams[]`)
+Each object in the `exams` array represents a specific exam session/instance.
+
+```javascript
+{
+  "id": "exam_1711135567890",        // Unique ID (prefixed with 'exam_')
+  "subject": "Macroeconomics 2",     // Matching core subject
+  "date": "2026-06-15",
+  "time": "09:00",
+  "building": "Rabin",
+  "room": "201",
+  "type": "Moed A",                  // Moed A, B, C, or Final
+  "isManual": true,                  // True if manually created by user
+  "isShield": false
+}
+```
+
+> [!NOTE]
+> **Storage Sanitizer (Self-Healing)**: `storage.js` includes a persistent `_sanitize` method that automatically detects course-like objects (those with `gradeComponents` or `topics`) in the `exams` bucket and migrates them to `courses` on load.
+
+---
+
+## 2. Syllabus UI & Integration State
+
+The "Syllabus Harvester" is currently a cross-context feature spanning the Chrome Extension and the Web Dashboard.
+
+### A. Extension Context (Moodle)
+- **Injection**: A native "ייבא ל-Student OS" button is injected into Moodle course pages next to syllabus links (PDF/DOCX).
+- **Extraction**: On click, it fetches the file, extracts text via `pdf.js`/`mammoth.js`, and sets a `pendingSyllabusImport` in shared extension storage.
+- **Bridge**: Communicates via `chrome.runtime.sendMessage` to focus/create the Student OS tab.
+
+### B. App Context (Dashboard & Insights Hub)
+- **Handshake Receiver**: `app.js` listens for a `message` event. Once received, it triggers the Gemini AI agent to analyze the text.
+- **Sync Alert**: Every successful import/update triggers a blocking `alert("Syllabus import process completed!");`.
+- **Merge/Foundational Fuzzy Match**: 
+  - **Current State**: The system automatically identifies existing courses based on bi-directional substring matching (`title.includes(agentName)` || `agentName.includes(title)`). If duplicates ("מקרו" vs "מקרו כלכלה") are found, it merges them and **deletes the redundant entries**.
+  - **Aspiration**: We aspire to implement more advanced phonetic or Levenshtein-based matching in future stages to handle cross-language or complex typo scenarios.
+- **Action Required UI**: 
+  - **"Action Required" List**: A collapsible (details/summary) section in the Insights Hub showing courses missing Nekaz (Credits).
+  - **Inline Editing**: Clicking the `Credits: [X]` badge on any course card opens a native `prompt` to directly update the Nekaz value without entering settings.
+
+---
+
+## 3. Module Hierarchy
+- [index.html](file:///c:/Users/User/Documents/MyProjects/exam-dashboard/index.html): Main dashboard entry (loads `app.js`).
+- [analytics.html](file:///c:/Users/User/Documents/MyProjects/exam-dashboard/analytics.html): Insights Hub (loads `analytics_app.js`).
+- [src/storage.js](file:///c:/Users/User/Documents/MyProjects/exam-dashboard/src/storage.js): The source of truth for all data interactions.
+- [src/ai_service.js](file:///c:/Users/User/Documents/MyProjects/exam-dashboard/src/ai_service.js): Handles agentic calls to Gemini.
+- [src/api_modal_manager.js](file:///c:/Users/User/Documents/MyProjects/exam-dashboard/src/api_modal_manager.js): Shared logic for API key management across pages.

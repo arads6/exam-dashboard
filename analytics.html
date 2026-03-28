@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Hub | Student OS</title>
+    <!-- Boxicons -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Styles -->
+    <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body class="analytics-page">
+    <div class="app-layout">
+        <!-- Persistent Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <i class='bx bx-check-square'></i> Student OS
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-item">
+                    <a href="index.html" class="sidebar-link">
+                        <i class='bx bx-calendar'></i> Schedule View
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="analytics.html" class="sidebar-link active">
+                        <i class='bx bx-bar-chart-alt-2'></i> Insights Hub
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer" style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border-color); cursor: not-allowed; opacity: 0.5;" title="API Settings available on Dashboard">
+                <button class="sidebar-link" style="width: 100%; background: transparent; border: none; cursor: inherit; text-align: left;">
+                    <i class='bx bx-key'></i> <span>AI Configured</span>
+                </button>
+            </div>
+        </aside>
+
+        <div class="app-container">
+            <header class="app-header" style="margin-bottom: 32px;">
+                <div class="header-content">
+                    <h1>Insights Hub</h1>
+                    <p>Course management, GPA tracking, and performance analytics.</p>
+                </div>
+            </header>
+
+            <!-- Summary Cards Section -->
+            <section class="summary-section" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 40px;">
+                <div class="summary-card" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px;">
+                    <div style="background: rgba(79, 172, 254, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-size: 1.5rem;">
+                        <i class='bx bx-bar-chart-square'></i>
+                    </div>
+                    <div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Current GPA</p>
+                        <h3 id="summary-gpa" style="font-size: 1.5rem; font-weight: 700;">0.00</h3>
+                    </div>
+                </div>
+                <div class="summary-card" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px;">
+                    <div style="background: rgba(3, 218, 198, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--secondary-color); font-size: 1.5rem;">
+                        <i class='bx bx-coin-stack'></i>
+                    </div>
+                    <div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Total Credits</p>
+                        <h3 id="summary-credits" style="font-size: 1.5rem; font-weight: 700;">0.0</h3>
+                    </div>
+                </div>
+                <div class="summary-card" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px;">
+                    <div style="background: rgba(255, 152, 0, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #ff9800; font-size: 1.5rem;">
+                        <i class='bx bx-time-five'></i>
+                    </div>
+                    <div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Pending Grades</p>
+                        <h3 id="summary-pending" style="font-size: 1.5rem; font-weight: 700;">0</h3>
+                    </div>
+                </div>
+                <div class="summary-card" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px;">
+                    <div style="background: rgba(187, 134, 252, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-size: 1.5rem;">
+                        <i class='bx bx-book-content'></i>
+                    </div>
+                    <div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Total Courses</p>
+                        <h3 id="summary-courses" style="font-size: 1.5rem; font-weight: 700;">0</h3>
+                    </div>
+                </div>
+            </section>
+
+            <main class="dashboard" style="display: grid; grid-template-columns: 1fr 350px; gap: 32px; align-items: start;">
+                
+                <!-- Left Column: Course Management -->
+                <div class="courses-container">
+                    <!-- Stage 6.10: Action Required (Missing Credits) -->
+                    <div id="nekaz-action-section" style="display: none; margin-bottom: 32px;">
+                        <div style="background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.3); border-radius: 12px; padding: 20px;">
+                            <h3 style="font-size: 1rem; color: #ff9800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                                <i class='bx bx-error-circle'></i> Action Required: Missing Credits
+                            </h3>
+                            <div id="nekaz-action-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
+                                <!-- Action items will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="courses-section" style="background: var(--surface-color); border-radius: 12px; padding: 32px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-color); padding-bottom: 24px; margin-bottom: 32px;">
+                            <div>
+                                <h2 style="font-size: 1.4rem; color: var(--text-primary); margin-bottom: 4px;"><i class='bx bx-library' style="color: var(--primary-color);"></i> Course Library</h2>
+                                <p style="color: var(--text-secondary); font-size: 0.95rem;">Manage credits and recorded grades per course.</p>
+                            </div>
+                            <button id="add-course-btn" class="primary-btn">
+                                <i class='bx bx-plus'></i> Add Course
+                            </button>
+                        </div>
+                        
+                        <div id="courses-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px;">
+                            <!-- Course Cards will load here -->
+                        </div>
+
+                        <!-- Empty State UX -->
+                        <div id="courses-empty-state" style="display: none; text-align: center; padding: 80px 40px; border: 2px dashed var(--border-color); border-radius: 16px;">
+                            <div style="background: rgba(79, 172, 254, 0.1); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; color: var(--primary-color); font-size: 3rem;">
+                                <i class='bx bx-book-add'></i>
+                            </div>
+                            <h2 style="margin-bottom: 12px;">Start Your Course Library</h2>
+                            <p style="color: var(--text-secondary); max-width: 400px; margin: 0 auto 32px;">Define your courses and their credit weights (Nekaz) to start tracking your academic performance across the OS.</p>
+                            <button id="add-course-empty-btn" class="primary-btn" style="padding: 12px 32px; font-size: 1.1rem;">
+                                <i class='bx bx-plus'></i> Add Your First Course
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- Right Column: Analytics & GPA -->
+            <aside class="analytics-metrics-section">
+                <div style="background: var(--surface-color); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); position: sticky; top: 24px;">
+                    <h2 style="font-size: 1.2rem; color: var(--text-primary); margin-bottom: 24px; text-align: center;"><i class='bx bx-trending-up'></i> Overall Performance</h2>
+                    
+                    <div id="insights-empty-state" style="text-align: center; color: var(--text-secondary); padding: 20px 0;">
+                        <i class='bx bx-book-reader' style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;"></i>
+                        <h3 style="color: var(--text-primary); margin-bottom: 8px;">No Grades Logged</h3>
+                        <p style="font-size: 0.9rem;">Ensure your exams have valid Grades and courses have defined Nekaz to see your GPA.</p>
+                    </div>
+                    
+                    <div id="insights-data" style="display: none; text-align: center;">
+                        <div class="gpa-circle" style="background: var(--card-bg); border: 2px solid var(--secondary-color); border-radius: 50%; width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; box-shadow: 0 8px 24px rgba(3, 218, 198, 0.15);">
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Current GPA</div>
+                                <div id="gpa-big-display" style="font-size: 3rem; font-weight: 700; color: var(--text-primary); margin-top: 4px;">0.00</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-color); border-radius: 8px; padding: 16px; text-align: left; border: 1px solid var(--border-color);">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary); font-size: 0.95rem;"><i class='bx bx-info-circle' style="color: var(--secondary-color);"></i> Active Algorithms</h4>
+                            <ul style="font-size: 0.85rem; color: var(--text-secondary); list-style: none; padding: 0; margin: 0;">
+                                <li style="margin-bottom: 8px;"><i class='bx bx-check' style="color: var(--secondary-color)"></i> Latest Grade Counts Policy (Moed B Overrides)</li>
+                                <li style="margin-bottom: 8px;"><i class='bx bx-check' style="color: var(--secondary-color)"></i> Credit-Weighted Averages</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+        </main>
+        </div><!-- Close app-container -->
+    </div><!-- Close app-layout -->
+
+    <!-- Add Course Modal -->
+    <div class="modal" id="course-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Define Course</h2>
+                <button class="icon-btn" id="close-course-modal-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <form id="course-form">
+                <div class="form-group">
+                    <label for="course-title">Course Title (Must match Exam IDs precisely)</label>
+                    <input type="text" id="course-title" required placeholder="e.g., Linear Algebra">
+                </div>
+                <div class="form-group">
+                    <label for="course-nekaz">Credit Weight (Nekaz)</label>
+                    <input type="number" id="course-nekaz" required min="0" step="0.5" placeholder="e.g., 4.5">
+                </div>
+                <button type="submit" class="primary-btn full-width" style="margin-top: 16px;">Save Course</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Grade Builder Modal (Phase 2) -->
+    <div class="modal" id="grade-builder-modal">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <div>
+                    <h2 id="grade-builder-title">Grade Breakdown</h2>
+                    <p id="grade-builder-course-name" style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;"></p>
+                </div>
+                <button class="icon-btn" id="close-grade-builder-btn"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div style="margin-bottom: 24px; padding: 16px; background: rgba(79, 172, 254, 0.05); border-radius: 8px; border: 1px solid rgba(79, 172, 254, 0.2);">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+                    <i class='bx bx-info-circle' style="color: var(--primary-color);"></i> 
+                    Define the weights for each component. Components marked as <strong>Shield</strong> will only be included if they improve your final grade.
+                </p>
+            </div>
+
+            <div id="grade-components-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                            <th style="padding: 12px 8px;"> Component Name</th>
+                            <th style="padding: 12px 8px; width: 100px;">Weight %</th>
+                            <th style="padding: 12px 8px; width: 80px; text-align: center;">Shield</th>
+                            <th style="padding: 12px 8px; width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="grade-components-list">
+                        <!-- Components will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <button id="add-component-btn" class="secondary-btn" style="width: 100%; margin-bottom: 24px; border-style: dashed;">
+                <i class='bx bx-plus'></i> Add New Component
+            </button>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                    Total Weight: <span id="total-weight-display" style="font-weight: 600; color: var(--text-primary);">0%</span>
+                </div>
+                <button id="save-grade-setup-btn" class="primary-btn">Save Breakdown</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./src/analytics_app.js" type="module"></script>
+    <script type="module" src="./src/api_modal_manager.js"></script>
+</body>
+</html>
