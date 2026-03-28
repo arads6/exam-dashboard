@@ -225,58 +225,7 @@ class ExamStorage {
         return true;
     }
 
-    /**
-     * Phase 2: Professional Grade Calculation
-     * Implements Weighted Average + Shield (Magen) Logic + Re-normalization
-     */
-    calculateFinalGrade(course) {
-        if (!course || !course.isConfigured || !course.gradeComponents || course.gradeComponents.length === 0) {
-            return null;
-        }
-
-        // 1. Separate components
-        const components = course.gradeComponents.map(c => ({
-            ...c,
-            score: c.score !== null && c.score !== undefined ? parseFloat(c.score) : null,
-            weight: parseFloat(c.weight)
-        }));
-
-        // GPA Constraint: All components must have a valid score
-        const allScored = components.every(c => c.score !== null && !isNaN(c.score));
-        if (!allScored) return null;
-
-        // 2. Identify potential shield components (isShield: true)
-        // A shield only counts if it improves the grade.
-        
-        // Base case: All components (including shields)
-        const calculateWeighted = (activeComponents) => {
-            const totalWeight = activeComponents.reduce((sum, c) => sum + c.weight, 0);
-            if (totalWeight === 0) return 0;
-            const rawSum = activeComponents.reduce((sum, c) => sum + (c.score * c.weight), 0);
-            return rawSum / totalWeight;
-        };
-
-        const baseGrade = calculateWeighted(components);
-
-        // Filter out shields that might be LOWER than the grade without them
-        let finalComponents = [...components];
-        let changed = true;
-
-        while (changed) {
-            changed = false;
-            const currentGrade = calculateWeighted(finalComponents);
-            
-            // Look for a shield that is lower than the current average
-            const badShieldIndex = finalComponents.findIndex(c => c.isShield && c.score < currentGrade);
-            
-            if (badShieldIndex !== -1) {
-                finalComponents.splice(badShieldIndex, 1);
-                changed = true; // Re-calculate to see if other shields now hurt
-            }
-        }
-
-        return calculateWeighted(finalComponents);
-    }
+    // calculateFinalGrade logic moved to Phase 9 GradeEngine
 
     // --- Exams API --- //
 

@@ -23,8 +23,9 @@ export class GradeEngine {
             weight: parseFloat(c.weight)
         }));
 
-        const allScored = components.every(c => c.score !== null && !isNaN(c.score));
-        if (!allScored) return null;
+        // Filter to only components with valid scores for a "Running Grade"
+        const validComponents = components.filter(c => c.score !== null && !isNaN(c.score) && c.weight > 0);
+        if (validComponents.length === 0) return null;
 
         const calculateWeighted = (activeComponents) => {
             const totalWeight = activeComponents.reduce((sum, c) => sum + c.weight, 0);
@@ -34,7 +35,7 @@ export class GradeEngine {
         };
         
         // Filter shields: remove shields that pull the grade down
-        let finalComponents = [...components];
+        let finalComponents = [...validComponents];
         let changed = true;
 
         while (changed) {
@@ -137,29 +138,40 @@ export class GradeEngine {
     }
 
     /**
-     * Detects the semester for a course based on its earliest exam date.
-     * Jan-Feb = A, June-July = B, Sept-Oct = Summer
-     * @param {string} courseId The course ID
-     * @param {Array} allExams The full list of exams
-     * @returns {string|null} "A", "B", "Summer", or null
+     * Enhanced Semester Detection (Smart Fallback)
      */
-    static detectSemester(courseId, allExams) {
-        if (!allExams || allExams.length === 0) return null;
+    static detectSemester(course, allExams) {
+        if (!course) return 'General';
 
-        const courseExams = allExams.filter(e => e.courseId === courseId || (e.courseTitle && e.courseTitle.includes(courseId)));
-        if (courseExams.length === 0) return null;
-
-        courseExams.sort((a, b) => new Date(a.date) - new Date(b.date));
-        const examDate = new Date(courseExams[0].date);
+        // Priority 1: Semantic Name Analysis (Hebrew / English)
+        const title = (course.title || '').toUpperCase();
         
-        if (isNaN(examDate.getTime())) return null;
+        // Match explicit words
+        if (/(סמסטר א|סמ' א|SEMESTER A|FALL)/.test(title)) return 'A';
+        if (/(סמסטר ב|סמ' ב|SEMESTER B|SPRING)/.test(title)) return 'B';
+        if (/(סמסטר קיץ|סמ' קיץ|SUMMER)/.test(title)) return 'Summer';
+        
+        const cleanTitle = title.replace(/מועד\s*[אבגA-C]+/g, '').replace(/MOED\s*[A-C]+/g, '');
+        if (/\bא[']?\b$/.test(cleanTitle)) return 'A';
+        if (/\bב[']?\b$/.test(cleanTitle)) return 'B';
 
-        const month = examDate.getMonth() + 1; // 1-12
-        if (month >= 1 && month <= 3) return 'A';
-        if (month >= 5 && month <= 8) return 'B';
-        if (month >= 9 && month <= 10) return 'Summer';
+        // Priority 2: Exam Dates
+        if (allExams && allExams.length > 0) {
+            const courseExams = allExams.filter(e => e.courseId === course.id || (e.courseTitle && e.courseTitle.includes(course.title)));
+            if (courseExams.length > 0) {
+                courseExams.sort((a, b) => new Date(a.date) - new Date(b.date));
+                const examDate = new Date(courseExams[0].date);
+                if (!isNaN(examDate.getTime())) {
+                    const month = examDate.getMonth() + 1;
+                    if (month >= 1 && month <= 4) return 'A';
+                    if (month >= 5 && month <= 8) return 'B';
+                    if (month >= 9 && month <= 10) return 'Summer';
+                }
+            }
+        }
 
-        return null;
+        // Priority 3: Manual or General
+        return course.semester || 'General';
     }
 
     /**

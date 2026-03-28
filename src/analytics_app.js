@@ -1,4 +1,5 @@
 import { storage } from './storage.js';
+import { GradeEngine } from './analytics/grade_engine.js';
 
 class AnalyticsApp {
     constructor() {
@@ -37,6 +38,14 @@ class AnalyticsApp {
         this.exams = [];
         this.analyticsModule = null;
 
+        // Phase 9: Simulation State
+        this.simulationMode = false;
+        this.simulationState = [];
+        this.autoSaveTimeout = null;
+
+        this.trendChart = null;
+        this.targetCredits = parseInt(localStorage.getItem('targetCredits')) || 120;
+
         this.init();
     }
 
@@ -45,6 +54,67 @@ class AnalyticsApp {
             this.analyticsModule = await import('./analytics/index.js');
         } catch(e) {
             console.warn("Analytics logic module missing:", e);
+        }
+
+        // Phase 9: Inject Simulation Toggle UI into Header
+        const header = document.querySelector('.app-header');
+        if (header) {
+            const toggleWrapper = document.createElement('div');
+            toggleWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 8px; width: fit-content;';
+            toggleWrapper.innerHTML = `
+                <i class='bx bx-flask' style="font-size: 1.2rem; color: var(--text-secondary);"></i>
+                <span id="sim-mode-label" style="font-size: 0.9rem; font-weight: 500; margin-right: 8px; color: var(--text-secondary);">Simulation: <strong style="color:var(--text-primary)">OFF</strong></span>
+                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                    <input type="checkbox" id="sim-mode-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .4s; border-radius: 24px;"></span>
+                </label>
+            `;
+            header.appendChild(toggleWrapper);
+
+            // Simulation Control Bar injected into App Container
+            const controlBar = document.createElement('div');
+            controlBar.id = 'sim-control-bar';
+            controlBar.style.cssText = 'display: none; justify-content: space-between; align-items: center; background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.3); padding: 12px 24px; border-radius: 8px; margin-bottom: 24px;';
+            controlBar.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; color: #ff9800; font-weight: 500;">
+                    <i class='bx bx-info-circle'></i> Simulation Mode: Changes are temporary.
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button id="sim-reset-btn" class="secondary-btn" style="border-color: rgba(255,152,0,0.5); color: #ff9800;">Reset</button>
+                    <button id="sim-commit-btn" class="primary-btn" style="background: #ff9800; color: #000; border: none;">Commit Changes</button>
+                </div>
+            `;
+            header.parentNode.insertBefore(controlBar, header.nextSibling);
+
+            document.getElementById('sim-reset-btn').addEventListener('click', () => {
+                this.simulationState = JSON.parse(JSON.stringify(this.courses)); // reload from persistent
+                this.render();
+            });
+
+            document.getElementById('sim-commit-btn').addEventListener('click', async () => {
+                if (confirm("Save these simulated grades as your actual scores?")) {
+                    for (const course of this.simulationState) {
+                        await storage.updateCourse(course);
+                    }
+                    await this.loadData();
+                    document.getElementById('sim-mode-toggle').click(); // toggle off seamlessly
+                }
+            });
+
+            document.getElementById('sim-mode-toggle').addEventListener('change', (e) => {
+                this.simulationMode = e.target.checked;
+                if (this.simulationMode) {
+                    this.simulationState = JSON.parse(JSON.stringify(this.courses)); // Fork state
+                    document.body.classList.add('simulation-active-body');
+                    document.getElementById('sim-mode-label').innerHTML = `Simulation: <strong style="color:#ff9800">ON</strong>`;
+                    document.getElementById('sim-control-bar').style.display = 'flex';
+                } else {
+                    document.body.classList.remove('simulation-active-body');
+                    document.getElementById('sim-mode-label').innerHTML = `Simulation: <strong style="color:var(--text-primary)">OFF</strong>`;
+                    document.getElementById('sim-control-bar').style.display = 'none';
+                }
+                this.render();
+            });
         }
 
         // STAGE 7.5: Inject Global CSS for UI Polish
@@ -71,10 +141,66 @@ class AnalyticsApp {
                 background: rgba(187, 134, 252, 0.15);
                 color: var(--primary-color) !important;
             }
+            /* Phase 9 Polish for Grade Inputs */
+            .comp-grade-input {
+                transition: all 0.3s ease;
+            }
+            .comp-grade-input:focus {
+                outline: none;
+                border-color: var(--primary-color) !important;
+                box-shadow: 0 0 8px rgba(187, 134, 252, 0.4);
+            }
+            .simulation-active-body .comp-grade-input:focus {
+                border-color: #ff9800 !important;
+                box-shadow: 0 0 8px rgba(255, 152, 0, 0.4) !important;
+            }
+            /* Toggle Switch CSS */
+            .slider:before {
+                position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;
+            }
+            input:checked + .slider { background-color: #ff9800; }
+            input:checked + .slider:before { transform: translateX(20px); }
+            
+            @keyframes pulseAmber {
+                0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+                70% { box-shadow: 0 0 0 15px rgba(255, 152, 0, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+            }
+            .simulation-active-body .gpa-circle {
+                animation: pulseAmber 2s infinite;
+                border-color: #ff9800 !important;
+            }
+            .simulation-active-body .app-header {
+                border-bottom: 2px solid #ff9800;
+                box-shadow: 0 4px 20px rgba(255, 152, 0, 0.1);
+            }
+            .simulation-glow {
+                color: #ff9800 !important;
+                text-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
+            }
+            .simulation-active-body #degree-progress-fill {
+                background-color: #ff9800 !important;
+                box-shadow: 0 0 12px rgba(255, 152, 0, 0.5);
+            }
         `;
         document.head.appendChild(style);
 
         this.bindEvents();
+        
+        // Phase 9.2: Target Credits Input Link
+        const tcInput = document.getElementById('target-credits-input');
+        if (tcInput) {
+            tcInput.value = this.targetCredits;
+            tcInput.addEventListener('change', (e) => {
+                const val = parseInt(e.target.value);
+                if (val > 0) {
+                    this.targetCredits = val;
+                    localStorage.setItem('targetCredits', val);
+                    this.updateGlobalGPA(); // trigger progress bar re-render
+                }
+            });
+        }
+        
         await this.loadData();
     }
 
@@ -267,12 +393,42 @@ class AnalyticsApp {
     }
 
     async handleComponentGradeUpdate(courseId, compIndex, scoreStr) {
-        const course = this.courses.find(c => c.id === courseId);
-        if (course && course.gradeComponents[compIndex]) {
-            const score = scoreStr.trim() === '' ? null : parseFloat(scoreStr);
-            course.gradeComponents[compIndex].score = score;
-            await storage.updateCourse(course);
-            await this.loadData();
+        const score = scoreStr.trim() === '' ? null : parseFloat(scoreStr);
+        
+        const applyUpdate = (courseObj) => {
+            if (courseObj && courseObj.gradeComponents[compIndex]) {
+                courseObj.gradeComponents[compIndex].score = score;
+                
+                // Update specific DOM element without wiping focus
+                const finalGrade = GradeEngine.calculateFinalGrade(courseObj);
+                const gradePill = document.getElementById(`final-grade-${courseObj.id}`);
+                if (gradePill) {
+                    if (finalGrade !== null && !isNaN(finalGrade)) {
+                        gradePill.innerHTML = `${finalGrade.toFixed(1)}`;
+                        gradePill.style.cssText = "font-size: 1.2rem; font-weight: 700; color: var(--secondary-color);";
+                    } else {
+                        gradePill.innerHTML = "Pending Scores";
+                        gradePill.style.cssText = "font-size: 0.75rem; font-weight: 600; color: #ff9800; background: rgba(255,152,0,0.1); padding: 4px 8px; border-radius: 4px; text-transform: uppercase;";
+                    }
+                }
+                this.updateGlobalGPA();
+            }
+        };
+
+        if (this.simulationMode) {
+            const course = this.simulationState.find(c => c.id === courseId);
+            applyUpdate(course);
+        } else {
+            const course = this.courses.find(c => c.id === courseId);
+            applyUpdate(course);
+            
+            if (course) {
+                // Phase 9.1: Auto-save debounce without reloading UI data during typing
+                clearTimeout(this.autoSaveTimeout);
+                this.autoSaveTimeout = setTimeout(async () => {
+                    await storage.updateCourse(course);
+                }, 1000);
+            }
         }
     }
 
@@ -287,9 +443,10 @@ class AnalyticsApp {
 
     render() {
         this.coursesGrid.innerHTML = '';
+        const coursesToRender = this.simulationMode ? this.simulationState : this.courses;
         
         // 1. Handle Empty State
-        if (this.courses.length === 0) {
+        if (coursesToRender.length === 0) {
             this.coursesEmptyState.style.display = 'block';
             this.coursesGrid.style.display = 'none';
         } else {
@@ -297,22 +454,22 @@ class AnalyticsApp {
             this.coursesGrid.style.display = 'grid';
             
             // Stage 6.8 & 6.9: Iterate over EVERY course with Error Boundaries
-            this.courses.forEach(course => {
+            coursesToRender.forEach(course => {
                 try {
                     // QA Rule: Strict safe navigation for all properties
                     const courseTitle = course?.title || 'Untitled Course';
                     const courseNekaz = course?.nekaz;
                     
-                    const finalGrade = storage.calculateFinalGrade(course);
+                    const finalGrade = GradeEngine.calculateFinalGrade(course);
                     const isPending = course?.isConfigured && finalGrade === null;
                     
                     // Final Grade Display
                     let gradeDisplay = '';
                     if (course?.isConfigured) {
                         if (finalGrade !== null && !isNaN(finalGrade)) {
-                            gradeDisplay = `<div style="font-size: 1.2rem; font-weight: 700; color: var(--secondary-color);">${finalGrade.toFixed(1)}</div>`;
+                            gradeDisplay = `<div id="final-grade-${course.id}" style="font-size: 1.2rem; font-weight: 700; color: var(--secondary-color);">${finalGrade.toFixed(1)}</div>`;
                         } else {
-                            gradeDisplay = `<div style="font-size: 0.75rem; font-weight: 600; color: #ff9800; background: rgba(255,152,0,0.1); padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Pending Scores</div>`;
+                            gradeDisplay = `<div id="final-grade-${course.id}" style="font-size: 0.75rem; font-weight: 600; color: #ff9800; background: rgba(255,152,0,0.1); padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Pending Scores</div>`;
                         }
                     }
 
@@ -419,7 +576,7 @@ class AnalyticsApp {
 
             // Bind Component Inputs
             document.querySelectorAll('.comp-grade-input').forEach(input => {
-                input.addEventListener('change', (e) => {
+                input.addEventListener('input', (e) => {
                     const cid = e.target.dataset.courseid;
                     const idx = e.target.dataset.index;
                     this.handleComponentGradeUpdate(cid, idx, e.target.value);
@@ -433,7 +590,7 @@ class AnalyticsApp {
                     e.stopPropagation(); // BUG FIX: Prevent opening course modal
                     
                     const cid = e.target.closest('.credit-badge-actionable').dataset.courseid;
-                    const course = this.courses.find(c => c.id === cid);
+                    const course = coursesToRender.find(c => c.id === cid);
                     
                     if (course) {
                         const currentNekaz = course.nekaz || "";
@@ -466,7 +623,7 @@ class AnalyticsApp {
         // this.renderUnassignedExams();
 
         // 3. Update Summary
-        this.updateGPAUI();
+        this.updateGlobalGPA();
     }
 
     renderNekazActions() {
@@ -539,55 +696,174 @@ class AnalyticsApp {
         }
     }
 
-    updateGPAUI() {
-        let totalWeightedGrades = 0;
-        let totalNekazForGpa = 0;
-        let pendingCount = 0;
+    updateGlobalGPA() {
+        const coursesToRender = this.simulationMode ? this.simulationState : this.courses;
+        const stats = GradeEngine.calculateGPA(coursesToRender);
 
-        this.courses.forEach(course => {
-            const finalGrade = storage.calculateFinalGrade(course);
-            const nekaz = parseFloat(course.nekaz);
-
-            // Logic Polish (Stage 6.6): Strictly ignore courses with TBD (NaN) credits in GPA math
-            if (course.isConfigured && !isNaN(nekaz) && finalGrade !== null) {
-                totalWeightedGrades += (finalGrade * nekaz);
-                totalNekazForGpa += nekaz;
-            } else if (course.isConfigured) {
-                // Configured but missing some scores OR missing credits
-                pendingCount++;
-            }
-        });
-
-        // Calculate Total Credits (all defined courses)
-        const totalCredits = this.courses.reduce((sum, c) => sum + parseFloat(c.nekaz || 0), 0);
-
-        if (totalNekazForGpa > 0) {
-            const gpa = (totalWeightedGrades / totalNekazForGpa).toFixed(2);
-            this.summaryGpa.textContent = gpa;
-            if (document.getElementById('gpa-big-display')) {
-                document.getElementById('gpa-big-display').textContent = gpa;
-            }
-        } else {
-            this.summaryGpa.textContent = '0.00';
-            if (document.getElementById('gpa-big-display')) {
-                document.getElementById('gpa-big-display').textContent = '0.00';
-            }
+        this.summaryGpa.textContent = stats.gpa.toFixed(2);
+        if (document.getElementById('gpa-big-display')) {
+            document.getElementById('gpa-big-display').textContent = stats.gpa.toFixed(2);
         }
 
-        this.summaryCredits.textContent = totalCredits.toFixed(1);
-        this.summaryPending.textContent = pendingCount;
-        this.summaryCourses.textContent = this.courses.length;
+        this.summaryCredits.textContent = stats.earnedCredits.toFixed(1);
+        if (document.getElementById('earned-credits-display')) {
+            document.getElementById('earned-credits-display').textContent = stats.earnedCredits.toFixed(1);
+        }
 
-        // Visual feedback if no courses are in GPA yet
+        // Degree Progress Bar Logic
+        const progressFill = document.getElementById('degree-progress-fill');
+        if (progressFill) {
+            const percentage = Math.min((stats.earnedCredits / this.targetCredits) * 100, 100);
+            progressFill.style.width = `${percentage}%`;
+        }
+
+        this.summaryPending.textContent = stats.pendingCount;
+        this.summaryCourses.textContent = coursesToRender.length;
+
+        // Render the Trend Chart
+        this.renderGPAChart(coursesToRender);
+
+        // Add visual glow in Simulation Mode
+        if (this.simulationMode) {
+            this.summaryGpa.classList.add('simulation-glow');
+            if (document.getElementById('gpa-big-display')) document.getElementById('gpa-big-display').classList.add('simulation-glow');
+            if (progressFill) progressFill.classList.add('simulation-glow'); // Re-uses amber-glow from CSS inject logic implicitly via background/box-shadow targeting body
+        } else {
+            this.summaryGpa.classList.remove('simulation-glow');
+            if (document.getElementById('gpa-big-display')) document.getElementById('gpa-big-display').classList.remove('simulation-glow');
+            if (progressFill) progressFill.classList.remove('simulation-glow');
+        }
+
         const insightsEmptyState = document.getElementById('insights-empty-state');
         const insightsData = document.getElementById('insights-data');
-        if (totalNekazForGpa > 0) {
+        if (stats.gpa > 0 || stats.totalAssignedCredits > 0) {
             if (insightsEmptyState) insightsEmptyState.style.display = 'none';
             if (insightsData) insightsData.style.display = 'block';
         } else {
             if (insightsEmptyState) insightsEmptyState.style.display = 'block';
             if (insightsData) insightsData.style.display = 'none';
         }
+    }
+
+    renderGPAChart(activeCourses) {
+        if (!window.Chart) return;
+        
+        const canvas = document.getElementById('semester-trend-chart');
+        if (!canvas) return;
+
+        // Group active courses by detected semester
+        const semesterBuckets = {};
+        const passedCourses = activeCourses.filter(c => {
+            const grade = GradeEngine.calculateFinalGrade(c);
+            return grade !== null && grade >= (c.minPassGrade || 60);
+        });
+
+        passedCourses.forEach(course => {
+            const sem = GradeEngine.detectSemester(course, this.exams);
+            if (!semesterBuckets[sem]) semesterBuckets[sem] = [];
+            semesterBuckets[sem].push(course);
+        });
+
+        // Time sorting mapping
+        const order = Object.keys(semesterBuckets).map(key => {
+            let earliest = Infinity;
+            semesterBuckets[key].forEach(c => {
+                const exams = this.exams.filter(e => e.courseId === c.id || (e.courseTitle && e.courseTitle.includes(c.title)));
+                exams.forEach(e => {
+                    const d = new Date(e.date).getTime();
+                    if (d < earliest) earliest = d;
+                });
+            });
+            return { key, time: earliest === Infinity ? 0 : earliest };
+        });
+        
+        order.sort((a,b) => a.time - b.time); // sorted chronologically
+        
+        const labels = [];
+        const dataPoints = [];
+        
+        order.forEach(item => {
+            labels.push(item.key);
+            const stats = GradeEngine.calculateGPA(semesterBuckets[item.key]);
+            dataPoints.push(stats.gpa);
+        });
+
+        const globalStats = GradeEngine.calculateGPA(activeCourses);
+        const globalGpaPoints = labels.map(() => globalStats.gpa);
+
+        const primaryColor = this.simulationMode ? '#ff9800' : '#03dac6';
+        const bgColor = this.simulationMode ? 'rgba(255, 152, 0, 0.1)' : 'rgba(3, 218, 198, 0.1)';
+
+        if (this.trendChart) {
+            this.trendChart.data.labels = labels;
+            this.trendChart.data.datasets[0].data = dataPoints;
+            this.trendChart.data.datasets[0].borderColor = primaryColor;
+            this.trendChart.data.datasets[0].pointBackgroundColor = primaryColor;
+            this.trendChart.data.datasets[0].pointBorderColor = primaryColor;
+            this.trendChart.data.datasets[0].backgroundColor = bgColor;
+            
+            this.trendChart.data.datasets[1].data = globalGpaPoints;
+            this.trendChart.update();
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        this.trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Semester GPA',
+                        data: dataPoints,
+                        borderColor: primaryColor,
+                        backgroundColor: bgColor,
+                        borderWidth: 2,
+                        pointBackgroundColor: primaryColor,
+                        pointBorderColor: primaryColor,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Global GPA',
+                        data: globalGpaPoints,
+                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                        borderWidth: 1,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                color: '#b3b3b3',
+                scales: {
+                    y: {
+                        min: 60,
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e1e1e',
+                        titleColor: '#fff',
+                        bodyColor: primaryColor,
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1
+                    }
+                }
+            }
+        });
     }
 }
 
