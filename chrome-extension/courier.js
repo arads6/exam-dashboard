@@ -1,29 +1,70 @@
 (async function() {
-    console.log("Syllabus Harvester: Courier Active - Checking for pending imports...");
+    const DASHBOARD_URL = 'http://localhost:8080';
+    console.log("Syllabus Harvester: Courier Active - Monitoring for Global Sync...");
+    
+    const bc = new BroadcastChannel('student_os_sync');
 
-    try {
-        // 1. Check if there is a pending syllabus waiting in storage
-        const result = await chrome.storage.local.get('pendingSyllabusImport');
-        
-        if (result && result.pendingSyllabusImport) {
-            console.log("Courier: Pending syllabus found. Delivering to Student OS...");
-            
-            // 2. Perform the Handshake via postMessage
-            // This sends the data into the page's JavaScript context
-            window.postMessage({
-                source: 'SYLLABUS_EXTENSION',
-                type: 'IMPORT_READY',
-                payload: result.pendingSyllabusImport
-            }, '*');
-
-            // 3. CRITICAL: Clear the storage immediately after delivery 
-            // This ensures the import doesn't trigger again if the user refreshes the page
-            await chrome.storage.local.remove('pendingSyllabusImport');
-            console.log("Courier: Delivery successful. Storage cleared.");
-        } else {
-            console.log("Courier: No pending syllabus import found.");
+    const checkAndDeliver = async () => {
+        try {
+            const gradeResult = await chrome.storage.local.get('pendingGradesImport');
+            if (gradeResult && gradeResult.pendingGradesImport) {
+                const payload = gradeResult.pendingGradesImport;
+                console.log("Courier: Persistent Payload detected. Syncing...");
+                
+                // 1. Direct Delivery
+                bc.postMessage({ type: 'SYNC_GRADES_SUCCESS', data: payload.data });
+                window.postMessage({
+                    source: 'SYLLABUS_EXTENSION',
+                    type: 'GRADE_IMPORT_READY',
+                    payload: payload.data,
+                    shouldPop: payload.shouldPop
+                }, '*');
+                
+                // 2. Clear from storage once handled
+                await chrome.storage.local.remove('pendingGradesImport');
+            }
+        } catch (error) {
+            console.error("Courier: Sync delivery error:", error);
         }
-    } catch (error) {
-        console.error("Courier: Error during handshake:", error);
-    }
+    };
+
+    // A. Listen for direct messages from Background Script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === 'SYNC_GRADES_PERSISTENT') {
+            console.log("Courier: Received GLOBAL SYNC signal. Checking location...");
+            
+            // 1. Save to Mailbox (LocalStorage) for Cold Starts/Redirects
+            window.localStorage.setItem('STUDENT_OS_PENDING_SYNC', JSON.stringify({
+                data: message.payload,
+                timestamp: Date.now()
+            }));
+
+            // 2. Check if on the correct page
+            if (!window.location.href.includes('analytics.html')) {
+                console.log("Courier: Not on analytics page. Redirecting...");
+                window.location.href = `${DASHBOARD_URL}/analytics.html`;
+            } else {
+                // Already here? Just trigger the pop-up
+                bc.postMessage({ type: 'SYNC_GRADES_SUCCESS', data: message.payload });
+            }
+        }
+    });
+
+    // B. Initial Load Check
+    await checkAndDeliver();
+
+    // C. Real-time Storage Listener 
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === 'local' && changes.pendingGradesImport && changes.pendingGradesImport.newValue) {
+            checkAndDeliver();
+        }
+    });
+
+    // D. Ready Signal from App
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'STUDENT_OS_APP_READY') {
+            checkAndDeliver();
+        }
+    });
+
 })();

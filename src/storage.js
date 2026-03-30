@@ -87,6 +87,14 @@ class ExamStorage {
             }
         });
 
+        // 3. Phase 11: Global Passing Threshold Migration (60 -> 56)
+        store.courses.forEach(c => {
+            if (!c.minPassGrade || c.minPassGrade === 60) {
+                c.minPassGrade = 56;
+                changed = true;
+            }
+        });
+
         if (dupesFound) {
             store.courses = uniqueCourses;
             changed = true;
@@ -221,6 +229,13 @@ class ExamStorage {
     async deleteCourse(id) {
         const store = await this._getStore();
         store.courses = store.courses.filter(c => c.id !== id);
+        await this._saveStore(store);
+        return true;
+    }
+
+    async clearAllCourses() {
+        const store = await this._getStore();
+        store.courses = [];
         await this._saveStore(store);
         return true;
     }

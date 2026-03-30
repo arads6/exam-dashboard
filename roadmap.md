@@ -28,12 +28,17 @@
 - **Full Intelligent Bidirectional Sync**: High-fidelity sync between Student OS and Google Calendar. Allow users to choose conflict resolution policies (Master Dashboard vs. External Changes) and sync data back from Google to the app.
 - **Moodle Integration for Task Tracking**: A centralized dashboard that pulls and displays all assignments from all courses in Moodle. Includes checkboxes for each task to track ongoing progress against deadlines. *Goal:* Provide a high-level overview of the academic workload and prevent missed deadlines.
 
+- **[BUG] Atomic 'Missing Credits' Refresh**: Fix sequential saves in the Action Required box to prevent DOM wipes. (Deferred to Phase 11/12).
+
 ## In Progress (Current Focus)
 
-- **Stacked Cards UI & Undo Logic**: Base overlapping and 'Taking/Skipping' state transitions.
-- **Classic Deck UI**: Redesign the stacked cards visual to a fully opaque physical deck, implement a 'Lift' modal interaction.
+- **Phase 11: Syllabus AI Harvester**: Automated scanning of syllabus PDFs to extract Nekaz, grade weights, and exam topics.
 
 ## Verified (Tested by me)
+
+- **Phase 10: Smart Library & Engine**: Professional Course Selection, GPA Audit Engine, and Resilient Portal Scraper.
+- **Stacked Cards UI & Undo Logic**: Base overlapping and 'Taking/Skipping' state transitions.
+- **Classic Deck UI**: Redesign the stacked cards visual to a fully opaque physical deck, implement a 'Lift' modal interaction.
 
 - **Smart Import**: Allow pasting raw text lists of exam dates for automatic entry.
 - **Core Sync & Logic**: Fixing the checklist synchronization and the auto-Moed assignment logic.

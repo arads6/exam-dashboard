@@ -6,6 +6,8 @@
  */
 
 export class GradeEngine {
+    static DEFAULT_MIN_PASS_GRADE = 56;
+
     /**
      * Calculates the final grade for a specific course based on its components.
      * Implements "Shield Grade" logic: includes shield only if it improves the score.
@@ -13,6 +15,23 @@ export class GradeEngine {
      * @returns {number|null} The final grade (0-100) or null if incomplete
      */
     static calculateFinalGrade(course) {
+        if (!course) return null;
+        
+        // 1. Source of Truth: The University Portal Overrides All
+        if (course.officialGrade !== undefined && course.officialGrade !== null) {
+            return GradeEngine.clampGrade(course.officialGrade);
+        }
+
+        // 2. Fallback to Local Computation
+        return GradeEngine.calculateComputedGrade(course);
+    }
+
+    /**
+     * Extracts the raw mathematical grade based on the components setup
+     * regardless of official records, allowing UI tracking for "drift".
+     * Supports "isOffset" components for manual adjustments.
+     */
+    static calculateComputedGrade(course) {
         if (!course || !course.isConfigured || !course.gradeComponents || course.gradeComponents.length === 0) {
             return null;
         }
@@ -23,9 +42,11 @@ export class GradeEngine {
             weight: parseFloat(c.weight)
         }));
 
-        // Filter to only components with valid scores for a "Running Grade"
-        const validComponents = components.filter(c => c.score !== null && !isNaN(c.score) && c.weight > 0);
-        if (validComponents.length === 0) return null;
+        // Separate normal components from offsets
+        const normalComponents = components.filter(c => !c.isOffset && c.score !== null && !isNaN(c.score) && c.weight > 0);
+        const offsetComponents = components.filter(c => c.isOffset && c.score !== null && !isNaN(c.score));
+
+        if (normalComponents.length === 0 && offsetComponents.length === 0) return null;
 
         const calculateWeighted = (activeComponents) => {
             const totalWeight = activeComponents.reduce((sum, c) => sum + c.weight, 0);
@@ -35,7 +56,7 @@ export class GradeEngine {
         };
         
         // Filter shields: remove shields that pull the grade down
-        let finalComponents = [...validComponents];
+        let finalComponents = [...normalComponents];
         let changed = true;
 
         while (changed) {
@@ -49,7 +70,14 @@ export class GradeEngine {
             }
         }
 
-        const finalGrade = calculateWeighted(finalComponents);
+        // Calculate base weighted grade
+        let finalGrade = normalComponents.length > 0 ? calculateWeighted(finalComponents) : 0;
+
+        // Apply offsets (Flat additions)
+        offsetComponents.forEach(offset => {
+            finalGrade += offset.score;
+        });
+
         return GradeEngine.clampGrade(finalGrade);
     }
 
@@ -98,41 +126,60 @@ export class GradeEngine {
             }
         }
 
+        console.group('📊 GPA Calculation Audit');
+        totalWeightedGrades = 0;
+        totalNekazForGpa = 0;
+        totalEarnedCredits = 0;
+        totalAssignedCredits = 0;
+        pendingCount = 0;
+
         activeCourses.forEach(course => {
             const finalGrade = GradeEngine.calculateFinalGrade(course);
-            const nekaz = parseFloat(course.nekaz);
+            const nekaz = parseFloat(course.nekaz) || 0;
+            const title = course.title || 'Unknown Course';
 
-            if (course.isConfigured && !isNaN(nekaz)) {
-                totalAssignedCredits += nekaz;
-                
-                if (finalGrade !== null) {
-                    const isPassed = finalGrade >= 60; // Assumed minimum pass grade
+            // Phase 11 & 11.2: Total Credits includes EVERYTHING in the library
+            totalAssignedCredits += nekaz;
 
-                    if (course.isBinary) {
-                        // Pass/Fail only contributes to credits
-                        if (isPassed) {
-                            totalEarnedCredits += nekaz;
-                        }
-                    } else {
-                        // Numeric Grade contributes to both GPA and credits
-                        if (isPassed) {
-                            totalEarnedCredits += nekaz;
-                        }
-                        totalWeightedGrades += (finalGrade * nekaz);
-                        totalNekazForGpa += nekaz;
-                    }
+            // Phase 11.2: Exemption Logic (Include in Credits, Exclude from GPA)
+            if (course.isExemption) {
+                totalEarnedCredits += nekaz;
+                console.log(`[Exempt]   ${title.padEnd(30)} | Status: Ptor | Credits: ${nekaz} | (Excluded from GPA)`);
+                return; // Skip remaining GPA-related logic for exemptions
+            }
+
+            if (finalGrade !== null) {
+                const isPassed = finalGrade >= (course.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE);
+
+                if (course.isBinary) {
+                    // Binary Case (Pass/Fail)
+                    if (isPassed) totalEarnedCredits += nekaz;
+                    console.log(`[Binary]   ${title.padEnd(30)} | Grade: Pass | Credits: ${nekaz} | (Excluded from GPA)`);
                 } else {
-                    pendingCount++;
+                    // Numeric Case
+                    if (isPassed) totalEarnedCredits += nekaz;
+                    totalWeightedGrades += (finalGrade * nekaz);
+                    totalNekazForGpa += nekaz;
+                    console.log(`[Numeric]  ${title.padEnd(30)} | Grade: ${finalGrade.toString().padEnd(4)} | Credits: ${nekaz.toString().padEnd(3)} | Points: ${(finalGrade * nekaz).toFixed(1)}`);
                 }
+            } else {
+                // No grade yet
+                pendingCount++;
+                console.log(`[Pending]  ${title.padEnd(30)} | Grade: ---  | Credits: ${nekaz} | (Skipped)`);
             }
         });
 
         const gpa = totalNekazForGpa > 0 ? (totalWeightedGrades / totalNekazForGpa) : 0;
+        
+        console.log('--------------------------------------------------------------------------------');
+        console.log(`Summary: Total Weighted Points (${totalWeightedGrades.toFixed(1)}) / Total GPA Credits (${totalNekazForGpa.toFixed(1)}) = ${gpa.toFixed(4)}`);
+        console.groupEnd();
 
         return {
             gpa: Number(gpa.toFixed(2)),
             totalAssignedCredits: Number(totalAssignedCredits.toFixed(1)),
             earnedCredits: Number(totalEarnedCredits.toFixed(1)),
+            totalWeightedGrades: Number(totalWeightedGrades.toFixed(1)),
             pendingCount
         };
     }

@@ -776,13 +776,27 @@ body.analytics-page .sidebar-link.active {
 .modal-content {
     background-color: var(--surface-color);
     border-radius: var(--card-radius);
-    width: 100%;
-    max-width: 500px;
+    width: 95%;
+    max-width: 500px; /* Default */
     padding: 32px;
     border: 1px solid var(--border-color);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
     max-height: 90vh;
     overflow-y: auto;
+    position: relative;
+    animation: modalSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Phase 11.2: Specific layout for Grade Builder */
+#grade-builder-modal .modal-content {
+    max-width: 650px;
+    padding: 24px 32px;
+}
+
+#grade-builder-course-name-input:focus {
+    border-color: var(--primary-color) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 0 10px rgba(187, 134, 252, 0.1), inset 0 2px 4px rgba(0,0,0,0.2) !important;
 }
 
 .modal-header {
@@ -790,6 +804,16 @@ body.analytics-page .sidebar-link.active {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 24px;
+    gap: 16px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+    margin-top: 16px;
 }
 
 .close-btn {

@@ -4,7 +4,7 @@
   "version": "1.0",
   "description": "Extracts syllabus data from BGU Moodle and sends it to Student OS.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
-  "host_permissions": ["*://moodle.bgu.ac.il/*"],
+  "host_permissions": ["*://moodle.bgu.ac.il/*", "*://portal.bgu.ac.il/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -19,9 +19,16 @@
       ]
     },
     {
+      "matches": ["*://portal.bgu.ac.il/*"],
+      "js": ["grade_harvester.js"]
+    },
+    {
       "matches": [
         "http://localhost:8080/*",
-        "http://127.0.0.1:8080/*"
+        "http://127.0.0.1:8080/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "file:///*"
       ],
       "js": ["courier.js"]
     }
