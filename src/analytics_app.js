@@ -386,6 +386,21 @@ class AnalyticsApp {
         });
 
         // Grade Builder Events
+        const deleteCourseBtn = document.getElementById('delete-course-from-modal-btn');
+        if (deleteCourseBtn) {
+            deleteCourseBtn.addEventListener('click', async () => {
+                const courseTitle = this.courses.find(c => c.id === this.currentEditingCourseId)?.title || 'this course';
+                if (confirm(`⚠️ Delete ${courseTitle} permanently?\n\nAll syllabus data and grade history will be lost.`)) {
+                    this.courses = this.courses.filter(c => c.id !== this.currentEditingCourseId);
+                    await storage.deleteCourse(this.currentEditingCourseId);
+                    this.gradeModal.classList.remove('active');
+                    this.render();
+                    this.updateGlobalGPA();
+                    this.showToast(`🗑️ Course deleted.`);
+                }
+            });
+        }
+
         this.closeGradeModalBtn.addEventListener('click', () => {
             this.gradeModal.classList.remove('active');
         });
@@ -468,7 +483,7 @@ class AnalyticsApp {
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'GRADE_IMPORT_READY') {
                 console.log("Analytics Hub: Received Extracted Grades payload from Harvester!");
-                this.triggerGradeImport(event.data.payload);
+                this.triggerGradeImport(event.data.payload, true);
             }
         });
 
@@ -497,11 +512,13 @@ class AnalyticsApp {
                     
                     // Cross Reference
                     this.stagedImports = candidates.map(c => {
-                        const existing = this.courses.find(ex => storage.isFuzzyMatch(ex.title, c.title));
+                        const analysis = CourseMatcher.analyzeMatch(c.title, this.courses);
+                        const isAuto = analysis.type === 'auto';
+                        const existing = isAuto ? analysis.course : null;
                         if (existing) {
-                            return { ...c, isDuplicate: true, existingId: existing.id, selected: false };
+                            return { ...c, isDuplicate: true, existingId: existing.id, isConflict: false, selected: false };
                         }
-                        return { ...c, isDuplicate: false, selected: true };
+                        return { ...c, isDuplicate: false, isConflict: analysis.type === 'conflict', selected: true };
                     });
                     
                     this.renderImportPreview();
@@ -564,24 +581,38 @@ class AnalyticsApp {
         }
     }
 
-    triggerGradeImport(payload) {
+    triggerGradeImport(payload, isAutoSync = false) {
         if (!payload || !Array.isArray(payload) || this.isSyncing) return;
+        
+        // Phase 11.5: Enforce strict session guard to prevent extension refresh loops
+        if (isAutoSync) {
+            if (sessionStorage.getItem('student_os_import_triggered')) {
+                window.localStorage.removeItem('STUDENT_OS_PENDING_SYNC');
+                return;
+            }
+            sessionStorage.setItem('student_os_import_triggered', 'true');
+        }
+        
         this.isSyncing = true; // Phase 11: Activate lock
 
         this.stagedImports = payload.map(c => {
-            // Phase 11: Strict Library-only matching for candidates
+            // Phase 11.4: Strict Library-only matching for candidates and aggressive unchecking
             const analysis = CourseMatcher.analyzeMatch(c.title, this.courses);
-            const existing = (analysis.type === 'auto') ? analysis.course : null;
+            const isAuto = (analysis.type === 'auto');
             const isConflict = (analysis.type === 'conflict');
             
-            const threshold = (existing && existing.minPassGrade) ? existing.minPassGrade : GradeEngine.DEFAULT_MIN_PASS_GRADE;
+            // Only auto-matches (including minor discrepancies) are considered 'existing'. 
+            // Conflicts (e.g. Micro vs Macro) are fundamentally different courses and MUST NOT be unchecked.
+            const existing = isAuto ? analysis.course : null; 
+            
+            const threshold = (isAuto && existing.minPassGrade) ? existing.minPassGrade : GradeEngine.DEFAULT_MIN_PASS_GRADE;
             
             // Phase 11: Exactly 56 is a pass.
             const isFailing = c.score !== null && c.score < threshold;
             const needsStatusCheck = c.score !== null && c.score >= threshold && c.score < 60;
             
             // Credits Discrepancy detection
-            const nekazDiscrepancy = existing && Math.abs((existing.nekaz || 0) - (c.nekaz || 0)) > 0.01;
+            const nekazDiscrepancy = isAuto && existing && Math.abs((existing.nekaz || 0) - (c.nekaz || 0)) > 0.01;
             
             // Binary logic override
             const passStatus = c.isBinary ? false : (isFailing || needsStatusCheck);
@@ -591,7 +622,7 @@ class AnalyticsApp {
                 isDuplicate: !!existing, 
                 existingId: existing ? existing.id : null, 
                 isConflict: isConflict,
-                selected: !existing, // Safety: Default to NEW if conflict or no match
+                selected: !existing, // Safety: UNCHECK immediately if there is ANY match
                 threshold: threshold,
                 isFailing: c.isBinary ? false : isFailing,
                 needsStatusCheck: passStatus,
@@ -622,7 +653,7 @@ class AnalyticsApp {
                 
                 // Allow the UI a small frame to settle before popping the modal
                 setTimeout(() => {
-                    this.triggerGradeImport(payload.data);
+                    this.triggerGradeImport(payload.data, true);
                     window.localStorage.removeItem('STUDENT_OS_PENDING_SYNC');
                 }, 100);
             } catch (e) {
@@ -688,12 +719,9 @@ class AnalyticsApp {
                     badges += `<span style="background: rgba(3, 218, 198, 0.2); color: var(--secondary-color); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">Verified Pass</span>`;
                 } else if (c.isPending) {
                     badges += `<span style="background: rgba(187, 134, 252, 0.2); color: #bb86fc; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px;">Pending Status</span>`;
-                } else if (c.needsStatusCheck) {
-                    const label = c.isFailing ? 'Failing Grade' : 'BGU Pass (Low)';
-                    const bgColor = c.isFailing ? 'rgba(207, 102, 121, 0.2)' : 'rgba(3, 218, 198, 0.1)';
-                    const textColor = c.isFailing ? '#cf6679' : 'var(--secondary-color)';
-                    badges += `<span style="background: ${bgColor}; color: ${textColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px;">${label}</span>`;
                 }
+                // Phase 11.4: Render ZERO textual badges for numeric grades (failing or low pass).
+                // They will rely exclusively on the CSS text/background color of the grade itself.
             }
 
             tr.innerHTML = `
@@ -1165,11 +1193,11 @@ class AnalyticsApp {
                     }
                 }
 
-                const cardHTML = `
-                    <div class="course-card" style="position: relative; background: var(--surface-color); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 16px;">
-                        <input type="checkbox" class="course-select-check" data-courseid="${course.id}" style="display: ${this.isSelectionMode ? 'block' : 'none'};" ${this.selectedIds.has(course.id) ? 'checked' : ''}>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div style="padding-left: ${this.isSelectionMode ? '16px' : '0'}; transition: padding 0.2s;">
+        const cardHTML = `
+            <div class="course-card" style="position: relative; background: var(--surface-color); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 16px;">
+                <input type="checkbox" class="course-select-check" data-courseid="${course.id}" style="display: ${this.isSelectionMode ? 'block' : 'none'};" ${this.selectedIds.has(course.id) ? 'checked' : ''}>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="padding-left: ${this.isSelectionMode ? '16px' : '0'}; transition: padding 0.2s;">
                                 <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 4px;">${this.escapeHTML(courseTitle)}</h3>
                                 <div style="display: flex; align-items: center; gap: 12px;">
                                     <span class="credit-badge-actionable" data-courseid="${course.id}" style="font-size: 0.85rem; color: var(--text-secondary);">
@@ -1209,12 +1237,32 @@ class AnalyticsApp {
 
         document.querySelectorAll('.delete-exemption-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const cid = e.target.closest('.delete-exemption-btn').dataset.courseid;
+                const cid = e.target.closest('button').dataset.courseid;
                 if (confirm("Remove this exemption permanently?")) {
                     this.courses = this.courses.filter(c => c.id !== cid);
                     await storage.deleteCourse(cid);
                     this.render();
                     this.updateGlobalGPA();
+                }
+            });
+        });
+
+        // Phase 11.5: Bind selection checkboxes so the "Delete Selected" button appears
+        document.querySelectorAll('.course-select-check').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const cid = e.target.dataset.courseid;
+                if (e.target.checked) {
+                    this.selectedIds.add(cid);
+                } else {
+                    this.selectedIds.delete(cid);
+                }
+                
+                // Update Multi-Delete Button state dynamically without a full re-render
+                const btn = document.getElementById('delete-selected-btn');
+                const countSpan = document.getElementById('selected-count');
+                if (btn && countSpan) {
+                    countSpan.textContent = this.selectedIds.size;
+                    btn.style.display = (this.isSelectionMode && this.selectedIds.size > 0) ? 'flex' : 'none';
                 }
             });
         });

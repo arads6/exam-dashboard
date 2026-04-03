@@ -1,5 +1,6 @@
 // Abstract Storage API
 // Upgraded to handle dual-schema (Courses and Exams) with auto-migration from legacy V1
+import { CourseMatcher } from './utils/course_matcher.js';
 
 class ExamStorage {
     constructor() {
@@ -164,16 +165,19 @@ class ExamStorage {
     isFuzzyMatch(str1, str2) {
         if (!str1 || !str2) return false;
         
+        // Prevent aggressive merging of semantically conflicting courses (e.g., Micro vs Macro)
+        if (CourseMatcher.hasConflict(str1, str2)) return false;
+        
         const s1 = str1.toLowerCase().trim();
         const s2 = str2.toLowerCase().trim();
         
         if (s1 === s2) return true;
-        if (s1.includes(s2) || s2.includes(s1)) return true;
 
-        // Number Guardrail
+        // Strict Number Guardrail: Base courses CANNOT swallow sequentially numbered courses
         const nums1 = this.extractNumbers(s1);
         const nums2 = this.extractNumbers(s2);
-        if (nums1.length > 0 && nums2.length > 0 && nums1 !== nums2) {
+        
+        if (nums1 !== nums2) {
             return false;
         }
 
@@ -182,7 +186,13 @@ class ExamStorage {
         if (norm1 === norm2 && norm1.length > 0) return true;
 
         const distance = this.levenshteinDistance(norm1, norm2);
-        const maxDist = Math.max(1, Math.floor(Math.min(norm1.length, norm2.length) / 4));
+        
+        // Phase 11.5: Ultra-strict Levenshtein. 
+        // Since we already stripped spaces, punctuation, and vowels, strings are densely packed.
+        // A distance of 2+ on a 9-char string means multiple fundamentally different consonants.
+        // Threshold: 0 for < 6 chars, 1 for 6-11 chars, max 2.
+        const maxDist = Math.floor(Math.min(norm1.length, norm2.length) / 6);
+        
         if (distance <= maxDist) return true;
 
         return false;

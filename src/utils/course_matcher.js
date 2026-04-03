@@ -9,8 +9,10 @@ export class CourseMatcher {
      */
     static normalize(str) {
         if (!str) return '';
+        // Explicitly strip Hebrew quotes, apostrophes, and standard quotes
+        let clean = str.toLowerCase().replace(/['"״׳`´]/g, '');
         // Remove Hebrew punctuation, dashes, spaces, etc.
-        return str.toLowerCase().replace(/[^a-z0-9א-ת]/g, '');
+        return clean.replace(/[^a-z0-9א-ת]/g, '');
     }
 
     /**
@@ -19,6 +21,7 @@ export class CourseMatcher {
     static getWords(str) {
         if (!str) return [];
         return str.toLowerCase()
+            .replace(/['"״׳`´]/g, '')
             .replace(/[-\s.,:()|_]+/g, ' ')
             .trim()
             .split(' ')
@@ -118,9 +121,33 @@ export class CourseMatcher {
     static simpleFuzzy(s1, s2) {
         const n1 = this.normalize(s1);
         const n2 = this.normalize(s2);
-        if (n1.includes(n2) || n2.includes(n1)) return true;
-        // Basic length-based similarity
-        const diff = Math.abs(n1.length - n2.length);
-        return diff < 3 && n1.length > 5;
+        if (n1 === n2) return true;
+        
+
+        if (n1.length === 0 || n2.length === 0) return false;
+
+        const matrix = [];
+        for (let i = 0; i <= n2.length; i++) {
+            matrix[i] = [i];
+        }
+        for (let j = 0; j <= n1.length; j++) {
+            matrix[0][j] = j;
+        }
+        for (let i = 1; i <= n2.length; i++) {
+            for (let j = 1; j <= n1.length; j++) {
+                if (n2.charAt(i - 1) === n1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1,
+                        Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+                    );
+                }
+            }
+        }
+        
+        const dist = matrix[n2.length][n1.length];
+        const maxDist = Math.max(1, Math.floor(Math.min(n1.length, n2.length) / 4));
+        return dist <= maxDist;
     }
 }

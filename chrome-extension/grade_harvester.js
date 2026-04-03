@@ -197,16 +197,21 @@
         console.log(`Student OS: Successfully harvested ${harvestedCourses.length} courses. Notifying background...`);
 
         if (harvestedCourses.length > 0) {
-            chrome.runtime.sendMessage({ 
-                action: 'open_student_os', 
-                payload: harvestedCourses 
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    console.error("Student OS: Messaging Error:", chrome.runtime.lastError.message);
-                } else {
-                    console.log("Student OS: Background sync handshake complete.");
-                }
-            });
+            try {
+                chrome.runtime.sendMessage({ 
+                    action: 'open_student_os', 
+                    payload: harvestedCourses 
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.error("Student OS: Messaging Error:", chrome.runtime.lastError.message);
+                    } else {
+                        console.log("Student OS: Background sync handshake complete.");
+                    }
+                });
+            } catch (err) {
+                console.error("Student OS: Extension disconnected.", err);
+                alert("Student OS:\nThe extension connection was reset (likely updated). Please refresh this page (F5) and click Sync again.");
+            }
         } else {
             alert("Student OS:\nScraper found 0 courses. Please try scrolling down to load the full table.");
         }
