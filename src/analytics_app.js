@@ -1279,7 +1279,7 @@ class AnalyticsApp {
     renderNekazActions() {
         if (!this.unassignedContainer) return;
         
-        const limboCourses = this.courses.filter(c => !c.nekaz || isNaN(parseFloat(c.nekaz)));
+        const limboCourses = this.courses.filter(c => c.nekaz === undefined || c.nekaz === null || c.nekaz === '' || isNaN(parseFloat(c.nekaz)));
         const englishMissing = !this.courses.some(c => c.isExemption && (c.title.toLowerCase().includes('english') || c.title.includes('אנגלית')));
         const showEnglishRec = englishMissing && !this.prefs.dismissedEnglishRec;
 
@@ -1433,7 +1433,7 @@ class AnalyticsApp {
                 row.remove();
                 
                 // Update Alert Summary dynamically
-                const limboRemaining = this.courses.filter(c => !c.nekaz || isNaN(parseFloat(c.nekaz)));
+                const limboRemaining = this.courses.filter(c => c.nekaz === undefined || c.nekaz === null || c.nekaz === '' || isNaN(parseFloat(c.nekaz)));
                 const titleSpan = this.unassignedContainer.querySelector('#nekaz-alert-title');
                 if (titleSpan) titleSpan.textContent = `Action Required: Missing Credits (${limboRemaining.length})`;
                 
