@@ -43,26 +43,48 @@ export class ImportEngine {
             const delimiter = ['|', ',', '-'].find(d => cleanLine.includes(d));
             if (delimiter) {
                 const parts = cleanLine.split(delimiter).map(p => p.trim());
-                if (parts.length >= 2) {
-                    const titleRaw = parts[0];
-                    const creditRaw = parts[1];
-                    const gradeRaw = parts[2] || null;
-
-                    const pNekaz = parseFloat(creditRaw);
-                    const pScore = gradeRaw ? parseFloat(gradeRaw) : null;
-
-                    if (!isNaN(pNekaz)) {
-                        results.push({
-                            title: titleRaw.replace(/[^a-zA-Zא-ת\d\s-"]/g, ' ').replace(/\s+/g, ' ').trim(),
-                            nekaz: pNekaz,
-                            score: pScore,
-                            isBinary: false,
-                            needsRetake: pScore !== null && pScore < 56,
-                            isConfigured: true,
-                            gradeComponents: pScore !== null ? [{ name: 'Imported Score', weight: 100, score: pScore, isShield: false }] : []
-                        });
-                        return; // Done with this line
+                
+                // Phase 11.5: Free-form Flexible Ordering
+                let titleParts = [];
+                let numberParts = [];
+                
+                parts.forEach(p => {
+                    const parsed = parseFloat(p);
+                    if (!isNaN(parsed) && String(parsed) === p.replace(/[^0-9.-]/g, '')) {
+                        numberParts.push(parsed);
+                    } else if (p.length > 0) {
+                        titleParts.push(p);
                     }
+                });
+
+                if (titleParts.length > 0) {
+                    const titleRaw = titleParts.join(' ');
+                    
+                    let pScore = null;
+                    let pNekaz = 0;
+                    
+                    if (numberParts.length === 1) {
+                        // Guess if it's a grade or credit based on size
+                        if (numberParts[0] > 20) pScore = numberParts[0]; else pNekaz = numberParts[0];
+                    } else if (numberParts.length >= 2) {
+                        // Sort by magnitude: larger is grade (typically > 40), smaller is credit (< 20)
+                        let n1 = numberParts[0];
+                        let n2 = numberParts[1];
+                        
+                        if (n1 > n2) { pScore = n1; pNekaz = n2; }
+                        else { pScore = n2; pNekaz = n1; }
+                    }
+
+                    results.push({
+                        title: titleRaw.replace(/[^a-zA-Zא-ת\d\s-"]/g, ' ').replace(/\s+/g, ' ').trim(),
+                        nekaz: pNekaz,
+                        score: pScore,
+                        isBinary: false,
+                        needsRetake: pScore !== null && pScore < 56,
+                        isConfigured: true,
+                        gradeComponents: pScore !== null ? [{ name: 'Imported Score', weight: 100, score: pScore, isShield: false }] : []
+                    });
+                    return; // Done with this line
                 }
             }
 
