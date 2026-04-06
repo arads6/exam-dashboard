@@ -76,7 +76,8 @@
         let targetContainer = null;
         const potentialHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, div, span, mat-card-title');
         for (const el of potentialHeaders) {
-            if (el.textContent.trim() === 'כל הציונים' && el.children.length === 0) {
+            if (!el) continue;
+            if (el.textContent.trim() === 'כל הציונים' && el.children?.length === 0) {
                 targetContainer = el.parentElement;
                 break;
             }

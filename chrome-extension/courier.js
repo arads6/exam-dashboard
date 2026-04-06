@@ -6,6 +6,27 @@
 
     const checkAndDeliver = async () => {
         try {
+            // Priority 1: Syllabus Deliveries (Phase 12.0 Restoration)
+            const syllabusResult = await chrome.storage.local.get('pendingSyllabusImport');
+            if (syllabusResult && syllabusResult.pendingSyllabusImport) {
+                const payload = syllabusResult.pendingSyllabusImport;
+                console.log(`Courier: Syllabus payload detected for "${payload.courseName}". Moving to mailbox...`);
+                
+                // 1. Primary Handshake: LocalStorage
+                window.localStorage.setItem('STUDENT_OS_PENDING_SYLLABUS', JSON.stringify(payload));
+                console.log("COURIER: Successfully injected data into LocalStorage.");
+                
+                // 2. Secondary Handshake (Fallback): postMessage Bridge
+                window.postMessage({
+                    source: 'SYLLABUS_EXTENSION',
+                    type: 'SYLLABUS_IMPORT_READY',
+                    payload: payload
+                }, '*');
+
+                await chrome.storage.local.remove('pendingSyllabusImport');
+                console.log("Courier: Syllabus moved to LocalStorage. Handshake ready.");
+            }
+
             const gradeResult = await chrome.storage.local.get('pendingGradesImport');
             if (gradeResult && gradeResult.pendingGradesImport) {
                 const payload = gradeResult.pendingGradesImport;
@@ -55,8 +76,11 @@
 
     // C. Real-time Storage Listener 
     chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local' && changes.pendingGradesImport && changes.pendingGradesImport.newValue) {
-            checkAndDeliver();
+        if (namespace === 'local') {
+            if (changes.pendingGradesImport?.newValue || changes.pendingSyllabusImport?.newValue) {
+                console.log("Courier: Storage change detected (Grades/Syllabus). Synchronizing...");
+                checkAndDeliver();
+            }
         }
     });
 

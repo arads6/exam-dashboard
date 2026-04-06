@@ -26,8 +26,8 @@ class AnalyticsApp {
         this.unassignedList = document.getElementById('nekaz-action-list');
 
         // Summary Card Elements
-        this.summaryGpa = document.getElementById('gpa-big-display');
-        this.summaryCredits = document.getElementById('earned-credits-display');
+        this.summaryGpa = document.getElementById('summary-gpa');
+        this.summaryCredits = document.getElementById('summary-credits');
         this.summaryPending = document.getElementById('summary-pending');
         this.summaryCourses = document.getElementById('summary-courses');
         this.unassignedCount = document.getElementById('unassigned-count');
@@ -95,7 +95,9 @@ class AnalyticsApp {
     }
 
     async init() {
-        this.checkPostBox(); // Priority 1: Check for any pending global syncs
+        console.log("APP: Initializing Analytics Hub logic...");
+        this.checkPostBox(); // Priority 1: Check mailbox before anything else
+        
         try {
             this.analyticsModule = await import('./analytics/index.js');
         } catch(e) {
@@ -434,6 +436,10 @@ class AnalyticsApp {
                     this.loadData();
                 }, 50);
             }
+            if (e.key === 'STUDENT_OS_PENDING_SYLLABUS' && e.newValue) {
+                console.log("Analytics Hub: Instant Syllabus Sync detected! Handoff to Dashboard...");
+                this.checkPostBox();
+            }
         });
 
         // Sync for same-tab updates (dispatched from storage.js)
@@ -484,6 +490,12 @@ class AnalyticsApp {
             if (event.data && event.data.type === 'GRADE_IMPORT_READY') {
                 console.log("Analytics Hub: Received Extracted Grades payload from Harvester!");
                 this.triggerGradeImport(event.data.payload, true);
+            }
+            if (event.data && event.data.source === 'SYLLABUS_EXTENSION' && event.data.type === 'SYLLABUS_IMPORT_READY') {
+                 console.log("Analytics Hub: Syllabus payload detected via message bridge! Handoff to Dashboard...");
+                 // Ensure the storage is set so index.html can catch it on load
+                 window.localStorage.setItem('STUDENT_OS_PENDING_SYLLABUS', JSON.stringify(event.data.payload));
+                 window.location.href = './index.html'; 
             }
         });
 
@@ -645,6 +657,13 @@ class AnalyticsApp {
      * during a cross-page redirect or cold start.
      */
     checkPostBox() {
+        console.log("APP: Checking mailbox for syllabus...");
+        const pendingSyllabus = window.localStorage.getItem('STUDENT_OS_PENDING_SYLLABUS');
+        if (pendingSyllabus) {
+            console.log("Analytics Hub: Syllabus payload detected in mailbox! Redirecting to Dashboard for AI processing...");
+            window.location.href = './index.html'; 
+            return; // Stop further init to prevent race conditions
+        }
         const pendingValue = window.localStorage.getItem('STUDENT_OS_PENDING_SYNC');
         if (pendingValue) {
             try {
@@ -1097,7 +1116,8 @@ class AnalyticsApp {
                             <i class='bx bx-trash'></i>
                         </button>
                     `;
-                } else if (course?.isConfigured) {
+                } else if (!course.isExemption) {
+                    // Standard Course Layout (Always shows Cog and Grade/Pending)
                     const finalGrade = GradeEngine.calculateFinalGrade(course);
                     const computedGrade = GradeEngine.calculateComputedGrade(course);
                     
@@ -1122,9 +1142,11 @@ class AnalyticsApp {
                             </div>
                         `;
                     } else {
+                        // Phase 11.11 Fix: Show "Pending" instead of empty if not configured
                         gradeDisplay = `<div id="final-grade-${course.id}" style="font-size: 0.75rem; font-weight: 600; color: #ff9800; background: rgba(255,152,0,0.1); padding: 4px 8px; border-radius: 4px; text-transform: uppercase;">Pending Scores</div>`;
                     }
 
+                    // Phase 11.11 Fix: Always show Cog if record is not an exemption
                     actionButton = `
                         <button class="icon-btn setup-grade-btn" data-courseid="${course.id}" title="Setup Grade Breakdown" style="margin-right: -4px;">
                             <i class='bx bx-cog'></i>
@@ -1136,7 +1158,8 @@ class AnalyticsApp {
                 let componentsHTML = '';
                 if (!course.isExemption) {
                     const components = course?.gradeComponents || [];
-                    if (course?.isConfigured && components.length > 0) {
+                    // Phase 11.11 Fix: Show components even if not fully configured (allows user to see what's wrong)
+                    if (components.length > 0) {
                         componentsHTML = `
                             <div style="padding-top: 12px; border-top: 1px dashed var(--border-color);">
                                 <h4 style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Grade Breakdown</h4>

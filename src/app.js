@@ -86,7 +86,33 @@ class App {
         );
     }
 
+    showToast(message, duration = 3000) {
+        const toast = document.createElement('div');
+        toast.style.position = 'fixed';
+        toast.style.bottom = '30px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.background = 'var(--surface-color)';
+        toast.style.color = 'var(--text-primary)';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '30px';
+        toast.style.boxShadow = '0 10px 40px rgba(0,0,0,0.5)';
+        toast.style.border = '1px solid var(--primary-color)';
+        toast.style.zIndex = '9999';
+        toast.style.fontSize = '0.9rem';
+        toast.style.fontWeight = '600';
+        toast.style.display = 'flex';
+        toast.style.alignItems = 'center';
+        toast.style.gap = '10px';
+        toast.innerHTML = `<i class='bx bx-info-circle' style='color: var(--primary-color)'></i> ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), duration);
+    }
+
     async init() {
+        console.log("APP: Initializing Dashboard logic...");
+        this.checkPostBox(); // Priority 1: Check mailbox before anything else
+        
         this.bindEvents();
         await this.loadExams();
         this.render();
@@ -364,40 +390,48 @@ class App {
 
                 await storage.saveCourse(updatedCourse); 
             } else {
-                // STAGE 7.5: Merge duplicates logic
+                // STAGE 7.5: Surgical Merge duplicates logic (PORTAL FIRST)
                 const existingCourse = matches[0]; // Primary record
                 const duplicates = matches.slice(1);
 
                 if (duplicates.length > 0) {
                     console.log(`🧹 [Stage 7.6] Merging ${duplicates.length} duplicate(s)...`);
                     for (const dup of duplicates) {
-                        try {
-                            await storage.deleteCourse(dup.id);
-                        } catch (e) {
-                            console.warn("Failed to delete duplicate course:", dup.id, e);
-                        }
+                        try { await storage.deleteCourse(dup.id); } catch (e) {}
                     }
                 }
 
-                // Merge Grade Components (Preserving manual scores from primary)
+                // Preserve "Source of Truth" from Portal
+                const officialGrade = existingCourse.officialGrade;
+                const nekaz = existingCourse.nekaz;
+                const isBinary = existingCourse.isBinary;
+                const isExemption = existingCourse.isExemption;
+
+                // Merge Grade Components (Preserving manual/portal scores)
                 const mergedComponents = agentResponse.gradeComponents.map(newComp => {
                     const existingComp = (existingCourse.gradeComponents || []).find(c => 
                         c.name.toLowerCase().trim() === newComp.name.toLowerCase().trim()
                     );
-
-                    return {
-                        ...newComp,
-                        score: existingComp ? existingComp.score : null 
-                    };
+                    return { ...newComp, score: existingComp ? existingComp.score : null };
                 });
 
-                const totalWeight = mergedComponents.reduce((sum, comp) => sum + (comp.weight || 0), 0);
-                const isConfigured = (totalWeight === 100);
+                // Check if we lost the primary "BGU Sync" grade. If so, add it back as a manual override.
+                const hasPortalComp = mergedComponents.some(c => c.name.includes('BGU') || c.name.includes('Sync'));
+                if (!hasPortalComp && officialGrade !== undefined) {
+                    console.log("Adding Portal grade component back to merged record...");
+                    mergedComponents.push({ name: 'BGU Sync (100%)', weight: 100, score: officialGrade, isShield: false });
+                }
 
+                const totalWeight = mergedComponents.reduce((sum, comp) => sum + (comp.weight || 0), 0);
+                
                 updatedCourse = {
                     ...existingCourse,
+                    officialGrade, // Lock these in
+                    nekaz,
+                    isBinary,
+                    isExemption,
                     gradeComponents: mergedComponents,
-                    isConfigured: isConfigured,
+                    isConfigured: (totalWeight === 100), // Recalculated but doesn't block UI anymore
                     topics: agentResponse.topics || existingCourse.topics,
                     staffMetadata: agentResponse.courseInfo.staff || existingCourse.staffMetadata,
                     lastSyllabusUpdate: new Date().toISOString(),
@@ -409,6 +443,10 @@ class App {
                 await storage.updateCourse(updatedCourse);
             }
             
+            const lecturerName = agentResponse.courseInfo.staff?.lecturer || 'Not found';
+            console.log(`AI_AGENT: Successfully parsed syllabus for [${agentResponse.courseInfo.moodleName}]. Found Lecturer: [${lecturerName}].`);
+
+            this.showToast(`✅ Syllabus Merged: Grades and Credits preserved for ${updatedCourse.title}`);
             console.log("✅ Course successfully synchronized: ", updatedCourse);
             
             // 7. Refresh UI
@@ -519,11 +557,14 @@ class App {
         // Cross-tab Sync
         window.addEventListener('storage', (e) => {
             if (e.key === 'student_os_data') {
-                console.log('[Main App Sync] Storage change detected (cross-tab). Debouncing refresh...');
                 clearTimeout(this.syncTimeout);
                 this.syncTimeout = setTimeout(() => {
-                    this.loadExams();
+                    this.loadExams().then(() => this.render());
                 }, 50);
+            }
+            if (e.key === 'STUDENT_OS_PENDING_SYLLABUS' && e.newValue) {
+                console.log("Dashboard: Instant Syllabus Sync detected via storage event!");
+                this.checkPostBox();
             }
         });
 
@@ -533,7 +574,7 @@ class App {
             if (this.isProcessingSyllabus) return;
 
             const message = event.data;
-            if (message && message.source === 'SYLLABUS_EXTENSION' && message.type === 'IMPORT_READY') {
+            if (message && message.source === 'SYLLABUS_EXTENSION' && (message.type === 'IMPORT_READY' || message.type === 'SYLLABUS_IMPORT_READY')) {
                 const payload = message.payload;
                 const safeName = this.escapeHTML(payload.courseName);
                 
@@ -1623,6 +1664,56 @@ class App {
         `;
     }
 
+
+    /**
+     * Mailbox Check: Look for any syllabus data left by the extension courier.
+     */
+    checkPostBox() {
+        console.log("APP: Checking mailbox for syllabus...");
+        const pendingSyllabus = window.localStorage.getItem('STUDENT_OS_PENDING_SYLLABUS');
+        if (pendingSyllabus) {
+            console.log("Dashboard: Syllabus payload detected in mailbox! Processing...");
+            try {
+                // IMMEDIATE CLEAR: Prevent "Ghost Data" from affecting other tabs/navigation
+                window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
+                
+                const payload = JSON.parse(pendingSyllabus);
+                this.triggerSyllabusImport(payload);
+            } catch (e) {
+                console.error("Dashboard: Failed to parse syllabus mailbox:", e);
+            }
+        }
+    }
+
+    /**
+     * Helper to trigger the syllabus AI extraction flow.
+     */
+    async triggerSyllabusImport(payload) {
+        if (this.isProcessingSyllabus) {
+            console.warn("Dashboard: [ABORT] Already processing a syllabus. Please wait.");
+            return;
+        }
+        
+        console.log(`Dashboard: [V12.0 Protocol] Triggering Syllbus Intelligence flow for: "${payload.courseName}"`);
+        this.isProcessingSyllabus = true;
+
+        try {
+            // Stage 5: Call the Agent
+            const jsonResponse = await this.processSyllabusWithAgent(payload.extractedText, {
+                moodleName: payload.courseName,
+                url: payload.syllabusHref
+            });
+
+            console.log("Agent Response (Syllabus_Specialist):", jsonResponse);
+            
+            // Stage 6: Integrate with Grading Engine
+            await this.applyAgentResultsToCourse(jsonResponse);
+        } catch (error) {
+            console.error("Dashboard: Syllabus Sync Logic Crashed:", error);
+        } finally {
+            this.isProcessingSyllabus = false;
+        }
+    }
 
 }
 

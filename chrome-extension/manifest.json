@@ -35,8 +35,17 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["lib/pdf.worker.min.js"],
-      "matches": ["*://moodle.bgu.ac.il/*"]
+      "resources": [
+        "lib/pdf.worker.min.js",
+        "lib/pdf.min.js",
+        "lib/mammoth.browser.min.js",
+        "courier.js"
+      ],
+      "matches": [
+        "*://moodle.bgu.ac.il/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*"
+      ]
     }
   ]
 }

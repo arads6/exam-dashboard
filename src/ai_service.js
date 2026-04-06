@@ -37,7 +37,9 @@ class AIService {
         2. Shields (מגן): phrases like "ציון הגבוה מבין השניים", "מגן" -> set "isShield": true.
         3. Hurdles: "ציון עובר במבחן" -> set "minPassGrade" (default 56 for BGU).
         4. Name Normalization: Clean "${metadata.moodleName}" as "cleanName".
-        5. Anti-Hallucination: Use Only provided data. No guessing.
+        5. Staff Extraction: Search for names near "מרצה", "Lecturer", "מתרגל", "TA". Use null if not found. NEVER use "TBD".
+        6. Language: Supports Hebrew and English. Preserve original script for names.
+        7. Anti-Hallucination: Use Only provided data. No guessing.
         
         Output Format (STRICT JSON ONLY):
         {
