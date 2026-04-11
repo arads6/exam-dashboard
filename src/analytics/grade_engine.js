@@ -87,7 +87,7 @@ export class GradeEngine {
      * @param {Array} courses List of all course objects
      * @returns {Object} { gpa: number, totalCredits: number, earnedCredits: number, pendingCount: number }
      */
-    static calculateGPA(courses) {
+    static calculateGPA(courses, suppressLog = false) {
         let totalWeightedGrades = 0;
         let totalNekazForGpa = 0;
         let totalEarnedCredits = 0;
@@ -126,7 +126,10 @@ export class GradeEngine {
             }
         }
 
-        console.group('📊 GPA Calculation Audit');
+        if (!suppressLog) {
+            console.group('📊 GPA Calculation Audit');
+        }
+        
         totalWeightedGrades = 0;
         totalNekazForGpa = 0;
         totalEarnedCredits = 0;
@@ -144,7 +147,7 @@ export class GradeEngine {
             // Phase 11.2: Exemption Logic (Include in Credits, Exclude from GPA)
             if (course.isExemption) {
                 totalEarnedCredits += nekaz;
-                console.log(`[Exempt]   ${title.padEnd(30)} | Status: Ptor | Credits: ${nekaz} | (Excluded from GPA)`);
+                if (!suppressLog) console.log(`[Exempt]   ${title.padEnd(30)} | Status: Ptor | Credits: ${nekaz} | (Excluded from GPA)`);
                 return; // Skip remaining GPA-related logic for exemptions
             }
 
@@ -154,26 +157,28 @@ export class GradeEngine {
                 if (course.isBinary) {
                     // Binary Case (Pass/Fail)
                     if (isPassed) totalEarnedCredits += nekaz;
-                    console.log(`[Binary]   ${title.padEnd(30)} | Grade: Pass | Credits: ${nekaz} | (Excluded from GPA)`);
+                    if (!suppressLog) console.log(`[Binary]   ${title.padEnd(30)} | Grade: Pass | Credits: ${nekaz} | (Excluded from GPA)`);
                 } else {
                     // Numeric Case
                     if (isPassed) totalEarnedCredits += nekaz;
                     totalWeightedGrades += (finalGrade * nekaz);
                     totalNekazForGpa += nekaz;
-                    console.log(`[Numeric]  ${title.padEnd(30)} | Grade: ${finalGrade.toString().padEnd(4)} | Credits: ${nekaz.toString().padEnd(3)} | Points: ${(finalGrade * nekaz).toFixed(1)}`);
+                    if (!suppressLog) console.log(`[Numeric]  ${title.padEnd(30)} | Grade: ${finalGrade.toString().padEnd(4)} | Credits: ${nekaz.toString().padEnd(3)} | Points: ${(finalGrade * nekaz).toFixed(1)}`);
                 }
             } else {
                 // No grade yet
                 pendingCount++;
-                console.log(`[Pending]  ${title.padEnd(30)} | Grade: ---  | Credits: ${nekaz} | (Skipped)`);
+                if (!suppressLog) console.log(`[Pending]  ${title.padEnd(30)} | Grade: ---  | Credits: ${nekaz} | (Skipped)`);
             }
         });
 
         const gpa = totalNekazForGpa > 0 ? (totalWeightedGrades / totalNekazForGpa) : 0;
         
-        console.log('--------------------------------------------------------------------------------');
-        console.log(`Summary: Total Weighted Points (${totalWeightedGrades.toFixed(1)}) / Total GPA Credits (${totalNekazForGpa.toFixed(1)}) = ${gpa.toFixed(4)}`);
-        console.groupEnd();
+        if (!suppressLog) {
+            console.log('--------------------------------------------------------------------------------');
+            console.log(`Summary: Total Weighted Points (${totalWeightedGrades.toFixed(1)}) / Total GPA Credits (${totalNekazForGpa.toFixed(1)}) = ${gpa.toFixed(4)}`);
+            console.groupEnd();
+        }
 
         return {
             gpa: Number(gpa.toFixed(2)),
@@ -190,7 +195,16 @@ export class GradeEngine {
     static detectSemester(course, allExams) {
         if (!course) return 'General';
 
-        // Priority 1: Semantic Name Analysis (Hebrew / English)
+        // Priority 1: Native Portal / AI Term Payload
+        if (course.term && typeof course.term === 'string' && course.term !== 'General') {
+             return course.term;
+        } else if (course.term && typeof course.term === 'object') {
+             const year = course.term.year || '';
+             const sem = course.term.semester || '';
+             if (year || sem) return `${year} ${sem}`.trim();
+        }
+
+        // Priority 2: Semantic Name Analysis (Hebrew / English)
         const title = (course.title || '').toUpperCase();
         
         // Match explicit words

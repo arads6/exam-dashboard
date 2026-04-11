@@ -58,6 +58,17 @@ class App {
         this.currentCompareBaseId = null;
         this.currentCompareConflicts = [];
 
+        // Identity Resolution Modal
+        this.identityModal = document.getElementById('identity-modal');
+        this.closeIdentityBtn = document.getElementById('close-identity-btn');
+        this.mergeIdentityBtn = document.getElementById('merge-identity-btn');
+        this.newIdentityBtn = document.getElementById('new-identity-btn');
+        this.cancelIdentityBtn = document.getElementById('cancel-identity-btn');
+        this.syllabusCourseNameLabel = document.getElementById('syllabus-course-name');
+        this.matchedCourseNameLabel = document.getElementById('matched-course-name');
+        this.pendingAgentResponse = null;
+        this.pendingMatchedCourse = null;
+
         // API Key Modal managed by apiModalManager
 
         this.currentChecklist = [];
@@ -114,11 +125,67 @@ class App {
         this.checkPostBox(); // Priority 1: Check mailbox before anything else
         
         this.bindEvents();
+        this.bindIdentityEvents(); // Identity Resolution bindings
         await this.loadExams();
         this.render();
 
         // Update countdowns every minute
         setInterval(() => this.updateAllCountdowns(), 60000);
+    }
+
+    bindIdentityEvents() {
+        if (this.closeIdentityBtn) this.closeIdentityBtn.onclick = () => this.closeIdentityModal();
+        if (this.cancelIdentityBtn) this.cancelIdentityBtn.onclick = () => this.closeIdentityModal();
+        
+        if (this.mergeIdentityBtn) {
+            this.mergeIdentityBtn.onclick = async () => {
+                if (this.pendingAgentResponse && this.pendingMatchedCourse) {
+                    await this.executeSurgicalMerge(this.pendingAgentResponse, this.pendingMatchedCourse);
+                    this.closeIdentityModal();
+                }
+            };
+        }
+
+        if (this.newIdentityBtn) {
+            this.newIdentityBtn.onclick = async () => {
+                if (this.pendingAgentResponse) {
+                    await this.executeCreateNewFromSyllabus(this.pendingAgentResponse);
+                    this.closeIdentityModal();
+                }
+            };
+        }
+    }
+
+    closeIdentityModal() {
+        if (this.identityModal) {
+            this.identityModal.classList.remove('active');
+            this.identityModal.classList.add('closing');
+            setTimeout(() => {
+                this.identityModal.classList.remove('closing');
+            }, 200);
+        }
+        this.pendingAgentResponse = null;
+        this.pendingMatchedCourse = null;
+    }
+
+    // Phase 11.13: Relaxed Similarity Check for Decision Modal
+    isSimilarMatch(s1, s2) {
+        if (!s1 || !s2) return false;
+        
+        // Exact normalized check first
+        const n1 = s1.toLowerCase().trim().replace(/[\s\-]/g, '');
+        const n2 = s2.toLowerCase().trim().replace(/[\s\-]/g, '');
+        if (n1 === n2) return true;
+
+        // If one contains the other (e.g. "Biology 1" vs "Biology")
+        if (n1.includes(n2) || n2.includes(n1)) return true;
+
+        // Basic keyword overlap (2+ words match)
+        const words1 = s1.toLowerCase().split(/[\s\-]+/);
+        const words2 = s2.toLowerCase().split(/[\s\-]+/);
+        const intersection = words1.filter(w => w.length > 2 && words2.includes(w));
+        
+        return intersection.length >= 1;
     }
 
     closeCompareModal() {
@@ -347,116 +414,130 @@ class App {
         return await aiService.callSyllabusAgent(rawText, metadata);
     }
 
-    /**
-     * Stage 6: Grading Engine Integration
-     * Merges AI-parsed data into the persistent storage.
-     */
     async applyAgentResultsToCourse(agentResponse) {
-        console.log("🛠️ [Stage 7.5] Integrating AI data for:", agentResponse.courseInfo.moodleName);
+        console.log("🛠️ [Phase 11.14] Identity Resolution for:", agentResponse.courseInfo.moodleName);
         
         try {
-            // 1. Load latest courses from storage
-            const allCourses = await storage.getCourses();
+            const allCourses = (await storage.getCourses()).filter(c => c && c.id && c.title);
+            const moodleName = agentResponse.courseInfo.moodleName;
             
-            // 2. Find ALL matching courses by clean name (Advanced Fuzzy Match with Guardrails)
-            const cleanNameTarget = agentResponse.courseInfo.cleanName;
-            const moodleNameTarget = agentResponse.courseInfo.moodleName;
+            // 1. Check for EXACT Match (Auto-Merge)
+            const exactMatches = allCourses.filter(c => storage.isFuzzyMatch(c.title, moodleName));
             
-            const matches = allCourses.filter(c => {
-                return storage.isFuzzyMatch(c.title, cleanNameTarget) || 
-                       (c.moodleName && storage.isFuzzyMatch(c.moodleName, cleanNameTarget)) ||
-                       (c.moodleName && moodleNameTarget && storage.isFuzzyMatch(c.moodleName, moodleNameTarget));
-            });
-
-            let updatedCourse;
-
-            if (matches.length === 0) {
-                console.log(`✨ [Stage 6.1] Course "${cleanNameTarget}" not found. Auto-creating new entry...`);
-                
-                updatedCourse = {
-                    id: 'course_' + Date.now().toString(),
-                    title: agentResponse.courseInfo.cleanName,
-                    moodleName: agentResponse.courseInfo.moodleName,
-                    gradeComponents: agentResponse.gradeComponents.map(c => ({ ...c, score: null })),
-                    topics: agentResponse.topics || [],
-                    staffMetadata: agentResponse.courseInfo.staff || {},
-                    isConfigured: (agentResponse.gradeComponents.reduce((s, c) => s + (c.weight || 0), 0) === 100),
-                    lastSyllabusUpdate: new Date().toISOString(),
-                    checklist: agentResponse.topics ? agentResponse.topics.map(t => ({ text: t, completed: false })) : [],
-                    date: "TBD",
-                    time: "TBD",
-                    nekaz: null 
-                };
-
-                await storage.saveCourse(updatedCourse); 
-            } else {
-                // STAGE 7.5: Surgical Merge duplicates logic (PORTAL FIRST)
-                const existingCourse = matches[0]; // Primary record
-                const duplicates = matches.slice(1);
-
-                if (duplicates.length > 0) {
-                    console.log(`🧹 [Stage 7.6] Merging ${duplicates.length} duplicate(s)...`);
-                    for (const dup of duplicates) {
-                        try { await storage.deleteCourse(dup.id); } catch (e) {}
-                    }
-                }
-
-                // Preserve "Source of Truth" from Portal
-                const officialGrade = existingCourse.officialGrade;
-                const nekaz = existingCourse.nekaz;
-                const isBinary = existingCourse.isBinary;
-                const isExemption = existingCourse.isExemption;
-
-                // Merge Grade Components (Preserving manual/portal scores)
-                const mergedComponents = agentResponse.gradeComponents.map(newComp => {
-                    const existingComp = (existingCourse.gradeComponents || []).find(c => 
-                        c.name.toLowerCase().trim() === newComp.name.toLowerCase().trim()
-                    );
-                    return { ...newComp, score: existingComp ? existingComp.score : null };
-                });
-
-                // Check if we lost the primary "BGU Sync" grade. If so, add it back as a manual override.
-                const hasPortalComp = mergedComponents.some(c => c.name.includes('BGU') || c.name.includes('Sync'));
-                if (!hasPortalComp && officialGrade !== undefined) {
-                    console.log("Adding Portal grade component back to merged record...");
-                    mergedComponents.push({ name: 'BGU Sync (100%)', weight: 100, score: officialGrade, isShield: false });
-                }
-
-                const totalWeight = mergedComponents.reduce((sum, comp) => sum + (comp.weight || 0), 0);
-                
-                updatedCourse = {
-                    ...existingCourse,
-                    officialGrade, // Lock these in
-                    nekaz,
-                    isBinary,
-                    isExemption,
-                    gradeComponents: mergedComponents,
-                    isConfigured: (totalWeight === 100), // Recalculated but doesn't block UI anymore
-                    topics: agentResponse.topics || existingCourse.topics,
-                    staffMetadata: agentResponse.courseInfo.staff || existingCourse.staffMetadata,
-                    lastSyllabusUpdate: new Date().toISOString(),
-                    checklist: (existingCourse.checklist && existingCourse.checklist.length > 0) 
-                                ? existingCourse.checklist 
-                                : (agentResponse.topics ? agentResponse.topics.map(t => ({ text: t, completed: false })) : [])
-                };
-
-                await storage.updateCourse(updatedCourse);
+            if (exactMatches.length > 0) {
+                return await this.executeSurgicalMerge(agentResponse, exactMatches[0], exactMatches.slice(1));
             }
-            
-            const lecturerName = agentResponse.courseInfo.staff?.lecturer || 'Not found';
-            console.log(`AI_AGENT: Successfully parsed syllabus for [${agentResponse.courseInfo.moodleName}]. Found Lecturer: [${lecturerName}].`);
 
-            this.showToast(`✅ Syllabus Merged: Grades and Credits preserved for ${updatedCourse.title}`);
-            console.log("✅ Course successfully synchronized: ", updatedCourse);
+            // 2. Check for SIMILAR Match (Decision Modal)
+            const similarMatches = allCourses.filter(c => this.isSimilarMatch(c.title, moodleName));
             
-            // 7. Refresh UI
-            await this.loadExams();
-            this.render();
+            if (similarMatches.length > 0) {
+                console.log("Near-Match detected! Opening Identity Resolution modal...");
+                this.pendingAgentResponse = agentResponse;
+                this.pendingMatchedCourse = similarMatches[0];
+                
+                if (this.syllabusCourseNameLabel) this.syllabusCourseNameLabel.textContent = moodleName;
+                if (this.matchedCourseNameLabel) this.matchedCourseNameLabel.textContent = similarMatches[0].title;
+                
+                if (this.identityModal) {
+                    this.identityModal.classList.add('active');
+                }
+                
+                return; // Wait for user decision
+            }
+
+            // 3. No match found -> Create New
+            await this.executeCreateNewFromSyllabus(agentResponse);
 
         } catch (error) {
-            console.error("❌ Stage 7.5 Synchronization Failed:", error);
-            throw error;
+            console.error("❌ applyAgentResults Error:", error);
+            this.showToast("Failed to process syllabus data.");
         }
+    }
+
+    async executeCreateNewFromSyllabus(agentResponse) {
+        let cleanTitle = agentResponse.courseInfo.cleanName || agentResponse.courseInfo.moodleName;
+        
+        const newCourse = {
+            title: cleanTitle,
+            moodleName: agentResponse.courseInfo.moodleName,
+            gradeComponents: agentResponse.gradeComponents.map(c => ({ ...c, score: null })),
+            topics: agentResponse.topics || [],
+            staffMetadata: agentResponse.courseInfo.staff || {},
+            isConfigured: (agentResponse.gradeComponents.reduce((s, c) => s + (c.weight || 0), 0) === 100),
+            lastSyllabusUpdate: new Date().toISOString(),
+            checklist: agentResponse.topics ? agentResponse.topics.map(t => ({ text: t, completed: false })) : [],
+            date: "-",
+            time: "-",
+            nekaz: null 
+        };
+
+        await storage.saveCourse(newCourse);
+        
+        this.showToast(`✨ New course [${newCourse.title}] created from syllabus.`);
+        await this.loadExams();
+        this.render();
+    }
+
+    async executeSurgicalMerge(agentResponse, existingCourse, duplicates = []) {
+        console.log(`🧹 Surgical Merge into: ${existingCourse.title}`);
+        
+        if (duplicates.length > 0) {
+            for (const dup of duplicates) {
+                try { await storage.deleteCourse(dup.id); } catch (e) {}
+            }
+        }
+
+        const officialGrade = existingCourse.officialGrade;
+        const nekaz = existingCourse.nekaz;
+        const isBinary = existingCourse.isBinary;
+        const isExemption = existingCourse.isExemption;
+
+        const mergedComponents = agentResponse.gradeComponents.map(newComp => {
+            const existingComp = (existingCourse.gradeComponents || []).find(c => 
+                c.name.toLowerCase().trim() === newComp.name.toLowerCase().trim()
+            );
+            return { ...newComp, score: existingComp ? existingComp.score : null };
+        });
+
+        const hasPortalComp = mergedComponents.some(c => c.name.includes('BGU') || c.name.includes('Sync'));
+        if (!hasPortalComp && officialGrade !== undefined) {
+            mergedComponents.push({ name: 'BGU Sync (100%)', weight: 100, score: officialGrade, isShield: false });
+        }
+
+        const totalWeight = mergedComponents.reduce((sum, comp) => sum + (comp.weight || 0), 0);
+        
+        const updatedCourse = {
+            ...existingCourse,
+            officialGrade, 
+            nekaz,
+            isBinary,
+            isExemption,
+            gradeComponents: mergedComponents,
+            isConfigured: (totalWeight === 100),
+            topics: agentResponse.topics || existingCourse.topics,
+            staffMetadata: agentResponse.courseInfo.staff || existingCourse.staffMetadata,
+            lastSyllabusUpdate: new Date().toISOString(),
+            checklist: (existingCourse.checklist && existingCourse.checklist.length > 0) 
+                        ? existingCourse.checklist 
+                        : (agentResponse.topics ? agentResponse.topics.map(t => ({ text: t, completed: false })) : [])
+        };
+
+        await storage.updateCourse(updatedCourse);
+        
+        const lecturerName = agentResponse.courseInfo.staff?.lecturer || 'Not found';
+        console.log(`AI_AGENT: Successfully parsed syllabus for [${agentResponse.courseInfo.moodleName}]. Found Lecturer: [${lecturerName}].`);
+
+        this.showToast(`✅ Syllabus processed and merged into ${updatedCourse.title}`);
+        
+        await this.loadExams();
+        this.render();
+    }
+
+    isSimilarMatch(str1, str2) {
+        const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return s1.includes(s2) || s2.includes(s1) || (s1.length > 3 && s2.length > 3 && (s1.substring(0, 3) === s2.substring(0, 3)));
     }
 
     bindEvents() {
@@ -596,7 +677,7 @@ class App {
                     console.error("Sync Logic Crashed:", error);
                 } finally {
                     this.isProcessingSyllabus = false;
-                    alert("Syllabus import process completed!");
+                    this.showToast("✨ Syllabus import process completed!");
                 }
             }
         });

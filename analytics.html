@@ -388,6 +388,36 @@
         </div>
     </div>
 
+    <!-- Identity Resolution Modal (Similarity Match) -->
+    <div id="identity-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2><i class='bx bx-git-merge'></i> Course Match Detected</h2>
+                <button class="close-btn" id="close-identity-btn" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.5rem;"><i class='bx bx-x'></i></button>
+            </div>
+            <div style="padding: 16px 0;">
+                <p style="color: var(--text-primary); font-weight: 500; margin-bottom: 12px;">The syllabus for <span id="syllabus-course-name" style="color: var(--primary-color);"></span> is similar to an existing course:</p>
+                
+                <div id="identity-candidates-list" style="margin-bottom: 16px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Candidates will be injected here as radio items -->
+                </div>
+
+                <p id="identity-target-instruction" style="margin-bottom: 16px; font-weight: 500; font-size: 0.95rem; display: none;">
+                    Merge syllabus into: <span id="identity-target-name"></span>
+                </p>
+
+                <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">Would you like to merge this syllabus into the existing card or create a separate course for it?</p>
+            </div>
+            <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="merge-identity-btn" class="primary-btn full-width">Merge into Existing Card</button>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                    <button id="new-identity-btn" class="secondary-btn" style="flex: 1;">Create as New</button>
+                    <button id="cancel-identity-btn" class="danger-btn" style="flex: 1;">Discard Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="./src/analytics_app.js" type="module"></script>
     <script type="module" src="./src/api_modal_manager.js"></script>
 </body>

@@ -1,6 +1,9 @@
+import { securityService } from './security_service.js';
+
 /**
- * Stage 6.6: Centralized API Modal Manager
- * Handles Modal Injection, Save/Clear logic, and state synchronization across all pages.
+ * Stage 6.6 & Phase 11.23: Centralized API Modal Manager (Secure Vault)
+ * Handles Modal Injection, Save/Clear logic, and state synchronization.
+ * Integrates with zero-trust SecurityService for AES-256 key storage.
  */
 class APIModalManager {
     constructor() {
@@ -9,6 +12,7 @@ class APIModalManager {
         // DOM Elements (Centralized)
         this.modal = document.getElementById('api-key-modal');
         this.keyInput = document.getElementById('api-key-input');
+        this.groqKeyInput = document.getElementById('groq-key-input');
         this.aliasInput = document.getElementById('api-key-alias');
         this.saveBtn = document.getElementById('save-api-key-btn');
         this.clearBtn = document.getElementById('clear-api-key-btn');
@@ -28,28 +32,34 @@ class APIModalManager {
             <div id="api-key-modal" class="modal">
                 <div class="modal-content" style="max-width: 450px;">
                     <div class="modal-header">
-                        <h2><i class='bx bx-lock-alt'></i> LLM Configuration</h2>
+                        <h2><i class='bx bx-lock-alt'></i> Secure LLM Vault</h2>
                         <button class="close-btn" id="close-api-modal-btn"><i class='bx bx-x'></i></button>
                     </div>
                     <div style="padding: 16px 0;">
                         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem; line-height: 1.5;">
-                            Enter your <strong>Gemini API Key</strong> to enable the Syllabus Harvester. 
-                            <br><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--primary-color);">Get a key from Google AI Studio &rarr;</a>
+                            Enter your API Keys to enable the Syllabus Harvester. Keys are encrypted locally using AES-256. 
+                            <br><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--primary-color);">Get a Gemini Key &rarr;</a>
+                             | <a href="https://console.groq.com/keys" target="_blank" style="color: var(--primary-color);">Get a Groq Key &rarr;</a>
                         </p>
                         <div class="form-group" style="margin-bottom: 16px;">
-                            <label for="api-key-alias">Key Alias / Nickname</label>
-                            <input type="text" id="api-key-alias" placeholder="e.g., My Personal Key" 
+                            <label for="api-key-alias">Vault Alias / Nickname</label>
+                            <input type="text" id="api-key-alias" placeholder="e.g., My Secure Vault" 
+                                   style="width: 100%; padding: 12px; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-primary); margin-top: 4px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label for="api-key-input">Primary Key (Gemini) <span style="color: #cf6679">*</span></label>
+                            <input type="password" id="api-key-input" placeholder="Paste Gemini key here..." 
                                    style="width: 100%; padding: 12px; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-primary); margin-top: 4px;">
                         </div>
                         <div class="form-group">
-                            <label for="api-key-input">Gemini API Key</label>
-                            <input type="password" id="api-key-input" placeholder="Paste your key here..." 
+                            <label for="groq-key-input">Fallback Key (Groq) <span style="font-size: 0.8em; color: var(--text-secondary);">(Optional)</span></label>
+                            <input type="password" id="groq-key-input" placeholder="Paste Groq key here..." 
                                    style="width: 100%; padding: 12px; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-primary); margin-top: 4px;">
                         </div>
                     </div>
                     <div class="modal-footer" style="display: flex; gap: 12px;">
-                        <button id="clear-api-key-btn" class="danger-btn" style="flex: 1;">Clear Key</button>
-                        <button id="save-api-key-btn" class="primary-btn" style="flex: 2;">Save Key</button>
+                        <button id="clear-api-key-btn" class="danger-btn" style="flex: 1;">Clear Vault</button>
+                        <button id="save-api-key-btn" class="primary-btn" style="flex: 2;">Encrypt & Save</button>
                     </div>
                 </div>
             </div>
@@ -61,16 +71,14 @@ class APIModalManager {
         this.bindEvents();
         this.updateUIStatus();
         
-        // Listen for storage changes to sync UI across tabs
         window.addEventListener('storage', (e) => {
-            if (e.key === 'GEMINI_API_KEY' || e.key === 'GEMINI_KEY_ALIAS') {
+            if (e.key === 'ENCRYPTED_GEMINI_KEY' || e.key === 'GEMINI_KEY_ALIAS') {
                 this.updateUIStatus();
             }
         });
     }
 
     bindEvents() {
-        // Global Delegation (Stage 6.8): Ensures the button works reliably across all pages
         document.body.addEventListener('click', (e) => {
             const btn = e.target.closest('#api-settings-btn');
             if (btn) {
@@ -83,7 +91,6 @@ class APIModalManager {
         if (this.saveBtn) this.saveBtn.addEventListener('click', () => this.saveKey());
         if (this.clearBtn) this.clearBtn.addEventListener('click', () => this.clearKey());
 
-        // Modal backdrop click
         window.addEventListener('click', (e) => {
             if (this.modal && e.target === this.modal) this.closeModal();
         });
@@ -91,10 +98,11 @@ class APIModalManager {
 
     openModal() {
         if (!this.modal) return;
-        const key = localStorage.getItem('GEMINI_API_KEY');
         const alias = localStorage.getItem('GEMINI_KEY_ALIAS');
         
-        if (this.keyInput) this.keyInput.value = key || '';
+        // Phase 11.23 Security: Keys are never displayed back in plaintext
+        if (this.keyInput) this.keyInput.value = securityService.hasKey('gemini') ? "********" : "";
+        if (this.groqKeyInput) this.groqKeyInput.value = securityService.hasKey('groq') ? "********" : "";
         if (this.aliasInput) this.aliasInput.value = alias || '';
         
         this.modal.classList.add('active');
@@ -105,7 +113,7 @@ class APIModalManager {
         const reset = () => {
             this.modal.classList.remove('active', 'closing');
             if (this.keyInput) this.keyInput.value = '';
-            if (this.aliasInput) this.aliasInput.value = '';
+            if (this.groqKeyInput) this.groqKeyInput.value = '';
         };
 
         if (this.modal.classList.contains('active')) {
@@ -117,25 +125,35 @@ class APIModalManager {
         }
     }
 
-    saveKey() {
+    async saveKey() {
         if (!this.keyInput) return;
         const key = this.keyInput.value.trim();
-        const alias = this.aliasInput ? this.aliasInput.value.trim() : "Main Key";
+        const groqKey = this.groqKeyInput ? this.groqKeyInput.value.trim() : "";
+        const alias = this.aliasInput ? this.aliasInput.value.trim() : "Secure Vault";
         
-        if (key) {
-            localStorage.setItem('GEMINI_API_KEY', key);
+        // Prevent saving literal "********" mask
+        if (key && key !== "********") {
+            await securityService.saveKey('gemini', key);
             localStorage.setItem('GEMINI_KEY_ALIAS', alias);
+        }
+        
+        if (groqKey && groqKey !== "********") {
+            await securityService.saveKey('groq', groqKey);
+        }
+
+        if (securityService.hasKey('gemini')) {
             this.updateUIStatus();
             this.closeModal();
             window.dispatchEvent(new CustomEvent('api_key_saved'));
         } else {
-            alert("Please enter a valid API key.");
+            alert("A valid Primary Gemini Key is required to power the AI Harvester.");
         }
     }
 
     clearKey() {
-        if (confirm("Are you sure you want to clear your API Key?")) {
-            localStorage.removeItem('GEMINI_API_KEY');
+        if (confirm("🛡️ Are you sure you want to permanently delete all encrypted keys from this device?")) {
+            securityService.clearKey('gemini');
+            securityService.clearKey('groq');
             localStorage.removeItem('GEMINI_KEY_ALIAS');
             this.updateUIStatus();
             this.closeModal();
@@ -144,11 +162,11 @@ class APIModalManager {
 
     updateUIStatus() {
         const alias = localStorage.getItem('GEMINI_KEY_ALIAS');
-        const hasKey = !!localStorage.getItem('GEMINI_API_KEY');
+        const hasKey = securityService.hasKey('gemini');
 
         const labels = document.querySelectorAll('#api-key-label');
         labels.forEach(label => {
-            label.textContent = hasKey ? `Active: ${alias || 'Key Set'}` : "Setup AI";
+            label.textContent = hasKey ? `Active: ${alias || 'Secured'}` : "Setup AI Vault";
         });
 
         const btns = document.querySelectorAll('#api-settings-btn');

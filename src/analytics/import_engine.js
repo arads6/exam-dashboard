@@ -176,10 +176,13 @@ export class ImportEngine {
                 needsRetake = true;
             }
 
-            // 4. Clean Course Name (Allow " for Hebrew acronyms like חדו"א)
             let title = cleanLine.replace(/[^a-zA-Zא-ת\d\s-"]/g, ' ').replace(/\s+/g, ' ').trim();
 
             if (title.length > 2) {
+                // Phase 11.30: Aggregate Filtering (Noise Reduction)
+                if (title.includes('סה"כ') || title.indexOf('סה"כ') === 0 || title.includes('סיכום')) {
+                    return; 
+                }
                 // Extreme PDF Bidi hotfix check: If the title starts with a final-form Hebrew letter
                 const hebrewSuffixes = /^[םןףץך]/;
                 if (hebrewSuffixes.test(title)) {

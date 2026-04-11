@@ -102,31 +102,42 @@
     function harvestGrades() {
         console.log("Student OS: Starting grade harvest...");
         
-        // 1. Robust Row Selection
-        let rows = document.querySelectorAll('mat-row.mat-mdc-row');
-        if (rows.length === 0) {
-            console.log("Student OS: No mat-row found, trying broader [role='row']...");
-            rows = document.querySelectorAll('[role="row"]');
-        }
+        // 1. Robust Row Selection (Sequential DOM walk to find semantic term headers)
+        let elements = document.querySelectorAll('h1, h2, h3, h4, mat-card-title, .semester-title, p.table-description, tr, mat-row.mat-mdc-row, [role="row"]');
 
-        if (rows.length === 0) {
+        if (elements.length === 0) {
             console.error("Student OS: No rows found even with fallback selectors.");
             alert('Student OS:\nCould not find any Grade rows. Please make sure you are on the "My Grades" tab.');
             return;
         }
 
-        console.log(`Student OS: Found ${rows.length} potential rows. Parsing...`);
+        console.log(`Student OS: Found ${elements.length} DOM elements for traversal. Parsing...`);
         harvestedCourses = [];
+        let currentTerm = 'General';
 
-        rows.forEach((row, idx) => {
+        elements.forEach((el, idx) => {
             try {
+                // Phase 11.29: Sequential Term ID Extraction
+                const rawText = (el.innerText || el.textContent || '').trim();
+                
+                // If this is a header candidate, check for academic term syntax
+                if (!el.matches('mat-row.mat-mdc-row, [role="row"]') || el.tagName === 'TR' || el.classList.contains('table-description')) {
+                     if (rawText.length < 100 && /(תש[א-ת]|202[0-9])/i.test(rawText) && /(סתו|אביב|קיץ|A|B|Summer|Fall|Spring)/i.test(rawText)) {
+                         currentTerm = rawText;
+                     }
+                }
+
+                // If not a data row, skip cell parsing
+                if (!el.matches('mat-row.mat-mdc-row, [role="row"]') && !el.querySelector('.cdk-column-assignmentText, [mat-column-name="assignmentText"]')) {
+                     return;
+                }
+
                 // 2. Target Cells using robust attribute-based or class-based selectors
-                const nameEl = row.querySelector('.cdk-column-assignmentText, [mat-column-name="assignmentText"]');
-                const ptsEl = row.querySelector('.cdk-column-points, [mat-column-name="points"]');
-                const ratingCell = row.querySelector('.cdk-column-rating, [mat-column-name="rating"]');
+                const nameEl = el.querySelector('.cdk-column-assignmentText, [mat-column-name="assignmentText"]');
+                const ptsEl = el.querySelector('.cdk-column-points, [mat-column-name="points"]');
+                const ratingCell = el.querySelector('.cdk-column-rating, [mat-column-name="rating"]');
 
                 if (!nameEl) {
-                    // This might be a header or footer row, skip silently unless it has a title
                     return;
                 }
 
@@ -188,7 +199,8 @@
                         score: score,
                         isShield: false
                     }],
-                    rawSource: 'bgu_portal_extension'
+                    rawSource: 'bgu_portal_extension',
+                    term: currentTerm
                 });
             } catch (err) {
                 console.error(`Student OS: Failed to parse row ${idx}:`, err);
@@ -198,6 +210,11 @@
         console.log(`Student OS: Successfully harvested ${harvestedCourses.length} courses. Notifying background...`);
 
         if (harvestedCourses.length > 0) {
+            if (!chrome.runtime?.id) {
+                console.error("Student OS: Extension context invalidated. Please refresh the page.");
+                alert("Student OS:\nThe extension connection was reset (likely updated). Please refresh this page (F5) and click Sync again.");
+                return;
+            }
             try {
                 chrome.runtime.sendMessage({ 
                     action: 'open_student_os', 

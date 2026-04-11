@@ -210,7 +210,12 @@
             };
 
             await chrome.storage.local.set({ pendingSyllabusImport: payload });
+        try {
+            if (!chrome.runtime?.id) throw new Error("Extension invalid");
             chrome.runtime.sendMessage({ action: "open_student_os" });
+        } catch (e) {
+            console.error("Student OS: Could not open dashboard - extension disconnected.");
+        }
             
         } catch (error) {
             console.error("Syllabus Harvester [CRASH]:", error);
@@ -223,6 +228,7 @@
     // --- Helpers: Persona [QA Agent] - Safe Implementations ---
     async function extractTextFromPdf(data) {
         try {
+            if (!chrome.runtime?.id) throw new Error("Extension invalid");
             pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js');
             const loadingTask = pdfjsLib.getDocument({ data: data });
             const pdf = await loadingTask.promise;

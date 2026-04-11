@@ -86,11 +86,20 @@ class AnalyticsApp {
         this.selectedIds = new Set();
         this.isSelectionMode = false;
         this.isSyncing = false; // Phase 11: Sync Lock
+        this.isProcessingSyllabus = false; // Phase 11.14
 
-        // Phase 11.3: Dashboard Preferences
-        const defaultPrefs = { englishExemption: false, dismissedEnglishRec: false };
-        this.prefs = JSON.parse(localStorage.getItem('student_os_prefs')) || defaultPrefs;
-        
+        // Identity Resolution Modal (Phase 11.14)
+        this.identityModal = document.getElementById('identity-modal');
+        this.closeIdentityBtn = document.getElementById('close-identity-btn');
+        this.mergeIdentityBtn = document.getElementById('merge-identity-btn');
+        this.newIdentityBtn = document.getElementById('new-identity-btn');
+        this.cancelIdentityBtn = document.getElementById('cancel-identity-btn');
+        this.syllabusCourseNameLabel = document.getElementById('syllabus-course-name');
+        this.matchedCourseNameLabel = document.getElementById('matched-course-name');
+        this.pendingAgentResponse = null;
+        this.pendingMatchedCourse = null;
+
+        this.prefs = JSON.parse(localStorage.getItem('student_os_prefs') || '{}');
         this.init();
     }
 
@@ -335,6 +344,7 @@ class AnalyticsApp {
         document.head.appendChild(style);
 
         this.bindEvents();
+        this.bindIdentityEvents(); // Phase 11.14
         
         // Phase 9.2: Target Credits Input Link
         const tcInput = document.getElementById('target-credits-input');
@@ -436,8 +446,8 @@ class AnalyticsApp {
                     this.loadData();
                 }, 50);
             }
-            if (e.key === 'STUDENT_OS_PENDING_SYLLABUS' && e.newValue) {
-                console.log("Analytics Hub: Instant Syllabus Sync detected! Handoff to Dashboard...");
+            if (e.key === 'STUDENT_OS_PENDING_SYLLABUS') {
+                console.log("ANALYTICS: Syllabus storage event detected!");
                 this.checkPostBox();
             }
         });
@@ -483,19 +493,75 @@ class AnalyticsApp {
         window.postMessage({ type: 'STUDENT_OS_APP_READY' }, '*');
     }
 
+    bindIdentityEvents() {
+        if (this.closeIdentityBtn) this.closeIdentityBtn.onclick = () => this.closeIdentityModal();
+        if (this.cancelIdentityBtn) this.cancelIdentityBtn.onclick = () => this.closeIdentityModal();
+        
+        if (this.mergeIdentityBtn) {
+            this.mergeIdentityBtn.onclick = async () => {
+                if (this.pendingAgentResponse) {
+                    // Phase 11.18: Get selected candidate from the list
+                    const selectedRadio = document.querySelector('input[name="candidate-selection"]:checked');
+                    if (!selectedRadio) {
+                        this.showToast("⚠️ Please select an existing course to merge into.");
+                        return;
+                    }
+                    
+                    const candidateId = selectedRadio.value;
+                    const course = this.courses.find(c => c.id === candidateId);
+                    
+                    if (course) {
+                        await this.executeSurgicalMerge(this.pendingAgentResponse, course);
+                        this.closeIdentityModal();
+                    }
+                }
+            };
+        }
+
+        if (this.newIdentityBtn) {
+            this.newIdentityBtn.onclick = async () => {
+                if (this.pendingAgentResponse) {
+                    await this.executeCreateNewFromSyllabus(this.pendingAgentResponse);
+                    this.closeIdentityModal();
+                }
+            };
+        }
+    }
+
+    closeIdentityModal() {
+        if (this.identityModal) {
+            this.identityModal.classList.remove('active');
+            this.identityModal.classList.add('closing');
+            setTimeout(() => {
+                this.identityModal.classList.remove('closing');
+            }, 200);
+        }
+        this.pendingAgentResponse = null;
+        this.pendingMatchedCourse = null;
+    }
+
     bindImportEvents() {
         if (!this.importModal) return;
 
+        window.addEventListener('analytics_toast', (e) => {
+            if (e.detail) this.showToast(`⚠️ ${e.detail}`);
+        });
+
         window.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'GRADE_IMPORT_READY') {
-                console.log("Analytics Hub: Received Extracted Grades payload from Harvester!");
-                this.triggerGradeImport(event.data.payload, true);
-            }
-            if (event.data && event.data.source === 'SYLLABUS_EXTENSION' && event.data.type === 'SYLLABUS_IMPORT_READY') {
-                 console.log("Analytics Hub: Syllabus payload detected via message bridge! Handoff to Dashboard...");
-                 // Ensure the storage is set so index.html can catch it on load
-                 window.localStorage.setItem('STUDENT_OS_PENDING_SYLLABUS', JSON.stringify(event.data.payload));
-                 window.location.href = './index.html'; 
+            if (!event.data) return;
+            
+            switch (event.data.type) {
+                case 'GRADE_IMPORT_READY':
+                case 'PORTAL_SYNC': // Phase 11.22: Unified message handling
+                    console.log("Analytics Hub: Received Extracted Grades payload from Portal/Harvester!");
+                    this.triggerGradeImport(event.data.payload, true);
+                    break;
+                case 'SYLLABUS_IMPORT_READY':
+                    if (event.data.source === 'SYLLABUS_EXTENSION') {
+                        console.log("Analytics Hub: Syllabus payload detected via message bridge!");
+                        this.triggerSyllabusImport(event.data.payload);
+                    }
+                    break;
             }
         });
 
@@ -508,6 +574,14 @@ class AnalyticsApp {
             this.stagedImports = [];
             this.renderImportPreview();
             this.importModal.classList.add('active');
+        });
+
+        this.cancelIdentityBtn.addEventListener('click', () => {
+             // Phase 11.26 explicitly requested: CLEAR Mailbox upon abort
+             window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
+             this.identityModal.classList.remove('active');
+             this.isProcessingSyllabus = false;
+             this.showToast("Syllabus logic bypassed. Mailbox cleared.");
         });
 
         this.closeImportBtn.addEventListener('click', () => {
@@ -526,7 +600,7 @@ class AnalyticsApp {
                     this.stagedImports = candidates.map(c => {
                         const analysis = CourseMatcher.analyzeMatch(c.title, this.courses);
                         const isAuto = analysis.type === 'auto';
-                        const existing = isAuto ? analysis.course : null;
+                        const existing = isAuto && analysis.best ? analysis.best.course : null; // Phase 11.22 Guard
                         if (existing) {
                             return { ...c, isDuplicate: true, existingId: existing.id, isConflict: false, selected: false };
                         }
@@ -615,9 +689,13 @@ class AnalyticsApp {
             
             // Only auto-matches (including minor discrepancies) are considered 'existing'. 
             // Conflicts (e.g. Micro vs Macro) are fundamentally different courses and MUST NOT be unchecked.
-            const existing = isAuto ? analysis.course : null; 
+            const existing = isAuto && analysis.best ? analysis.best.course : null; 
             
-            const threshold = (isAuto && existing.minPassGrade) ? existing.minPassGrade : GradeEngine.DEFAULT_MIN_PASS_GRADE;
+            // Phase 11.22 Guard: Data Integrity Shield to protect against null reference on minPassGrade
+            let threshold = GradeEngine.DEFAULT_MIN_PASS_GRADE;
+            if (existing && existing.minPassGrade !== undefined) {
+                threshold = existing.minPassGrade;
+            }
             
             // Phase 11: Exactly 56 is a pass.
             const isFailing = c.score !== null && c.score < threshold;
@@ -653,16 +731,20 @@ class AnalyticsApp {
     }
 
     /**
-     * Mailbox Check: Look for any sync data left by the extension courier
-     * during a cross-page redirect or cold start.
+     * Phase 11.14: Native Syllabus Mailbox 
      */
     checkPostBox() {
-        console.log("APP: Checking mailbox for syllabus...");
+        console.log("ANALYTICS: Checking mailbox for syllabus...");
         const pendingSyllabus = window.localStorage.getItem('STUDENT_OS_PENDING_SYLLABUS');
         if (pendingSyllabus) {
-            console.log("Analytics Hub: Syllabus payload detected in mailbox! Redirecting to Dashboard for AI processing...");
-            window.location.href = './index.html'; 
-            return; // Stop further init to prevent race conditions
+            console.log("Analytics Hub: Syllabus payload detected! Processing...");
+            try {
+                window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
+                const payload = JSON.parse(pendingSyllabus);
+                this.triggerSyllabusImport(payload);
+            } catch (e) {
+                console.error("Mailbox Error:", e);
+            }
         }
         const pendingValue = window.localStorage.getItem('STUDENT_OS_PENDING_SYNC');
         if (pendingValue) {
@@ -722,6 +804,11 @@ class AnalyticsApp {
 
             // Contextual Visual Badges
             let badges = '';
+            
+            // Phase 11.30: UI Term Detection Preview
+            const termBadge = `<span style="background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px;" title="Detected Semester"><i class='bx bx-time-five' style="vertical-align: middle; margin-right: 2px;"></i>${c.term && c.term !== 'General' ? this.escapeHTML(c.term) : 'Unknown'}</span>`;
+            badges += termBadge;
+
             if (c.isDuplicate) badges += `<span style="background: rgba(255, 152, 0, 0.2); color: #ff9800; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px;">Existing Candidate</span>`;
             
             if (c.isConflict) {
@@ -831,6 +918,7 @@ class AnalyticsApp {
     }
 
     async loadData() {
+        this.isInitialLoad = true;
         this.courses = await storage.getCourses();
         this.exams = await storage.getExams();
         
@@ -1070,6 +1158,18 @@ class AnalyticsApp {
     }
 
     render() {
+        if (this.isSyncing || this.isProcessingSyllabus) {
+            console.log("APP: Render deferred - Handshake lock active.");
+            return;
+        }
+
+        if (this._renderDebounce) clearTimeout(this._renderDebounce);
+        this._renderDebounce = setTimeout(() => {
+            this._executeRender();
+        }, 250);
+    }
+
+    _executeRender() {
         if (!this.coursesGrid || !this.exemptionsGrid) return;
 
         this.coursesGrid.innerHTML = '';
@@ -1176,15 +1276,13 @@ class AnalyticsApp {
                     }
                 }
 
-                // Syllabus Metadata (Only for non-exemptions)
                 let syllabusMetaHTML = '';
                 let topicsHTML = '';
                 if (!course.isExemption) {
-                    const staff = course?.staffMetadata;
+                    const lecturer = course?.lecturer || '-';
+                    const ta = course?.ta || '-';
                     const topics = course?.topics || [];
-                    if (staff || topics.length > 0) {
-                        const lecturer = staff?.lecturer || 'TBD';
-                        const ta = staff?.ta || 'TBD';
+                    if (lecturer !== '-' || ta !== '-' || topics.length > 0) {
                         syllabusMetaHTML = `
                             <div style="padding: 12px; background: rgba(187, 134, 252, 0.03); border: 1px dashed rgba(187, 134, 252, 0.2); border-radius: 8px; margin-top: 12px;">
                                 <div style="font-size: 0.75rem; color: var(--primary-color); text-transform: uppercase; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px;">Syllabus Intelligence</div>
@@ -1204,7 +1302,7 @@ class AnalyticsApp {
                     if (topics && topics.length > 0) {
                         const listItems = topics.map(t => `<li style="margin-bottom: 6px; color: var(--text-secondary);">${this.escapeHTML(t)}</li>`).join('');
                         topicsHTML = `
-                            <details style="padding: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 12px;">
+                            <details open style="padding: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; margin-top: 12px;">
                                 <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); user-select: none;">
                                     📖 Course Syllabus Topics
                                 </summary>
@@ -1302,9 +1400,15 @@ class AnalyticsApp {
     renderNekazActions() {
         if (!this.unassignedContainer) return;
         
-        const limboCourses = this.courses.filter(c => c.nekaz === undefined || c.nekaz === null || c.nekaz === '' || isNaN(parseFloat(c.nekaz)));
-        const englishMissing = !this.courses.some(c => c.isExemption && (c.title.toLowerCase().includes('english') || c.title.includes('אנגלית')));
-        const showEnglishRec = englishMissing && !this.prefs.dismissedEnglishRec;
+        // Safety Fallback for settings
+        this.prefs = this.prefs || JSON.parse(localStorage.getItem('student_os_prefs') || '{}');
+        
+        // Skip properties check if library is empty
+        const isLibraryEmpty = !this.courses || this.courses.length === 0;
+        const englishMissing = isLibraryEmpty || !this.courses.some(c => c.isExemption && (c.title.toLowerCase().includes('english') || c.title.includes('אנגלית')));
+        const showEnglishRec = englishMissing && !this.prefs?.dismissedEnglishRec;
+
+        const limboCourses = isLibraryEmpty ? [] : this.courses.filter(c => c.nekaz === undefined || c.nekaz === null || c.nekaz === '' || isNaN(parseFloat(c.nekaz)));
 
         // Show if EITHER credits are missing OR English Recommendation is active
         if (limboCourses.length === 0 && !showEnglishRec) {
@@ -1480,8 +1584,20 @@ class AnalyticsApp {
     }
 
     updateGlobalGPA() {
+        if (this._gpaDebounce) clearTimeout(this._gpaDebounce);
+        this._gpaDebounce = setTimeout(() => {
+            this._executeGlobalGPA();
+        }, 250);
+    }
+
+    _executeGlobalGPA() {
+        const suppressLog = !this.isInitialLoad;
         const coursesToRender = this.simulationMode ? this.simulationState : this.courses;
-        const stats = GradeEngine.calculateGPA(coursesToRender);
+        const stats = GradeEngine.calculateGPA(coursesToRender, suppressLog);
+        
+        if (this.isInitialLoad) {
+            this.isInitialLoad = false;
+        }
 
         this.summaryGpa.textContent = stats.gpa.toFixed(2);
         if (document.getElementById('gpa-big-display')) {
@@ -1598,13 +1714,16 @@ class AnalyticsApp {
         const labels = [];
         const dataPoints = [];
         
+        let cumulativeCourses = [];
+        
         order.forEach(item => {
             labels.push(item.key);
-            const stats = GradeEngine.calculateGPA(semesterBuckets[item.key]);
+            cumulativeCourses = cumulativeCourses.concat(semesterBuckets[item.key]);
+            const stats = GradeEngine.calculateGPA(cumulativeCourses, true);
             dataPoints.push(stats.gpa);
         });
 
-        const globalStats = GradeEngine.calculateGPA(activeCourses);
+        const globalStats = GradeEngine.calculateGPA(activeCourses, true);
         const globalGpaPoints = labels.map(() => globalStats.gpa);
 
         const primaryColor = this.simulationMode ? '#ff9800' : '#03dac6';
@@ -1799,9 +1918,284 @@ class AnalyticsApp {
         if (confirm("⚠️ Are you sure you want to CLEAR the entire library? \n\nIMPORTANT: All syllabus data, topics, and grade breakdown for ALL courses will be permanently lost.")) {
             this.selectedIds.clear();
             await storage.clearAllCourses();
+            
+            // Phase 11.28: Settings Recovery & Reset English Recommendation
+            if (this.prefs) {
+                delete this.prefs.dismissedEnglishRec;
+                delete this.prefs.englishExemption;
+                localStorage.setItem('student_os_prefs', JSON.stringify(this.prefs));
+            }
+
             this.showToast("🗑️ Library cleared.");
             await this.loadData();
         }
+    }
+
+    /**
+     * Phase 11.16: Resilient Syllabus Import (Unified Data Contract)
+     */
+    async triggerSyllabusImport(payload) {
+        console.log("DEBUG: Payload structure:", payload);
+        if (!payload || this.isProcessingSyllabus) return;
+        
+        // Data Contract Mapping (Raw vs Agent Results)
+        const moodleName = payload?.courseInfo?.moodleName || payload?.courseName;
+        const syllabusUrl = payload?.courseInfo?.originalSyllabusUrl || payload?.syllabusHref;
+        
+        if (!moodleName) {
+            console.error("Syllabus Harvester: [Contract] No course name found in payload.", payload);
+            this.showToast("❌ Invalid payload received.");
+            return;
+        }
+
+        this.isProcessingSyllabus = true;
+        this.showToast("🧠 AI Agent: Harvesting syllabus data...");
+
+        // Smart Logic: If payload is raw (extracted text), call the AI Agent first
+        let processedResults = payload;
+        if (payload?.extractedText && !payload?.gradeComponents) {
+            try {
+                console.log("Analytics Hub: Raw text detected. Triggering AI extraction...");
+                const { aiService } = await import('./ai_service.js');
+                processedResults = await aiService.callSyllabusAgent(payload.extractedText, {
+                    moodleName,
+                    url: syllabusUrl
+                });
+                console.log("AI Extraction Result:", processedResults);
+            } catch (e) {
+                console.error("AI Extraction Failed:", e);
+                this.showToast("❌ AI Extraction Failed. Manual entry required.");
+                this.isProcessingSyllabus = false;
+                return;
+            }
+        }
+
+        try {
+            const match = CourseMatcher.analyzeMatch(moodleName, this.courses);
+            
+            // Phase 11.18: Block Auto-Create. If any match exists (Auto, Candidate, or Conflict), pop the modal.
+            if (match.type !== 'none' && match.candidates.length > 0) {
+                console.log(`IDENTITY: ${match.candidates.length} potential matches detected. Enforcing user resolution.`);
+                this.showIdentityResolutionModal(processedResults, match.candidates);
+            } else {
+                console.log("No identity candidates found. Proceeding with new course creation.");
+                await this.executeCreateNewFromSyllabus(processedResults);
+            }
+        } catch (e) {
+            console.error("Syllabus Import Error:", e);
+            this.showToast("❌ Error processing syllabus.");
+        } finally {
+            this.isProcessingSyllabus = false;
+        }
+    }
+
+    async applyAgentResultsToCourse(course, payload) {
+        if (!course || !payload) return;
+
+        // Phase 11.26: Grade Shield Logic (Preserve both explicit scores AND the Official top level grade)
+        if (!course.gradeComponents || course.gradeComponents.length === 0 || (course.gradeComponents.length === 1 && course.gradeComponents[0].name === 'BGU Transcript Sync' && course.gradeComponents[0].score === null)) {
+             // If local is entirely blank or just a pending placeholder, accept the AI's component breakdown
+             course.gradeComponents = payload.gradeComponents.map(c => ({
+                 name: c.name,
+                 weight: parseFloat(c.weight) || 0,
+                 isShield: !!c.isShield,
+                 score: c.score || null,
+                 minPassGrade: c.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE
+             }));
+        } else {
+             // Deep Merge Shield: If they already have a real structure, DO NOT BLANK IT OUT.
+             // We only map incoming scores to existing components if they explicitly match.
+             const incomingScores = new Map();
+             (payload.gradeComponents || []).forEach(c => {
+                 if (c.score !== null && c.score !== undefined) incomingScores.set(c.name, c.score);
+             });
+             
+             course.gradeComponents = course.gradeComponents.map(c => {
+                 const newSyllabusScore = incomingScores.get(c.name);
+                 return {
+                     ...c,
+                     score: c.score ?? (newSyllabusScore ?? null) // existing wins
+                 };
+             });
+        }
+
+        course.topics = (course.topics && course.topics.length > 0) ? course.topics : (payload.topics || []);
+        course.syllabusUrl = course.syllabusUrl || payload.courseInfo?.originalSyllabusUrl || null;
+        
+        // Clean metadata & Handle Term Persistence prioritizing Portal Extracted String
+        course.lecturer = course.lecturer || payload.courseInfo?.staff?.lecturer || null;
+        course.ta = course.ta || payload.courseInfo?.staff?.ta || null;
+        
+        // Term Merge
+        if (!course.term || course.term === 'General') {
+             course.term = payload.courseInfo?.term || 'General';
+        }
+
+        course.isConfigured = true;
+
+        await storage.updateCourse(course);
+        this.render();
+        this.showToast(`✅ ${course.title} synced with AI Syllabus!`);
+    }
+
+    showIdentityResolutionModal(payload, candidates) {
+        this.pendingAgentResponse = payload;
+        
+        if (this.syllabusCourseNameLabel) {
+            this.syllabusCourseNameLabel.textContent = payload?.courseInfo?.moodleName || 'Unknown Course';
+        }
+        
+        const listContainer = document.getElementById('identity-candidates-list');
+        const targetInstruction = document.getElementById('identity-target-instruction');
+        const targetNameLabel = document.getElementById('identity-target-name');
+        
+        if (this.mergeIdentityBtn) {
+            this.mergeIdentityBtn.disabled = true;
+            this.mergeIdentityBtn.style.opacity = '0.5';
+        }
+
+        if (listContainer) {
+            listContainer.innerHTML = ''; // Force clear
+            
+            const candidateArray = Array.isArray(candidates) ? candidates : [candidates];
+            console.log(`IDENTITY UI: Attempting to render ${candidateArray.length} items to the modal.`);
+
+            try {
+                if (candidateArray.length === 0) throw new Error("candidates array is empty.");
+
+                candidateArray.forEach((cand) => {
+                    if (!cand || !cand.course) return;
+
+                    const itemLabel = document.createElement('label');
+                    itemLabel.className = 'identity-candidate-item'; 
+                    itemLabel.style.display = 'flex';
+                    itemLabel.style.alignItems = 'center';
+                    itemLabel.style.gap = '12px';
+                    itemLabel.style.padding = '12px 16px';
+                    itemLabel.style.background = 'rgba(187, 134, 252, 0.1)';
+                    itemLabel.style.border = '2px solid #555';
+                    itemLabel.style.borderRadius = '8px';
+                    itemLabel.style.cursor = 'pointer';
+                    itemLabel.style.transition = 'all 0.2s';
+                    itemLabel.style.marginBottom = '8px'; // Ensure visual separation
+                    itemLabel.style.color = 'var(--text-primary)';
+                    
+                    itemLabel.innerHTML = `
+                        <input type="radio" name="candidate-selection" value="${cand.course.id}" style="width: 20px; height: 20px; accent-color: var(--primary-color);">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; margin-bottom: 2px;">${cand.course.title || 'Untitled Course'}</div>
+                            <div style="font-size: 0.8rem; color: #a5a5a5;">Match Confidence: ${Math.round((cand.score || 0) * 100)}%</div>
+                        </div>
+                    `;
+                    
+                    itemLabel.addEventListener('click', () => {
+                        // Reset all borders
+                        listContainer.querySelectorAll('.identity-candidate-item').forEach(l => {
+                            l.style.borderColor = '#555';
+                        });
+                        itemLabel.style.borderColor = 'var(--primary-color)';
+                        
+                        const radio = itemLabel.querySelector('input');
+                        if (radio) radio.checked = true;
+
+                        if (targetInstruction && targetNameLabel) {
+                            targetInstruction.style.display = 'block';
+                            targetNameLabel.textContent = cand.course.title;
+                            
+                            if (cand.score < 0.6) {
+                                targetNameLabel.style.color = '#cf6679';
+                                targetNameLabel.style.fontWeight = '900';
+                            } else {
+                                targetNameLabel.style.color = 'var(--primary-color)';
+                                targetNameLabel.style.fontWeight = '700';
+                            }
+                        }
+                        
+                        if (this.mergeIdentityBtn) {
+                            this.mergeIdentityBtn.disabled = false;
+                            this.mergeIdentityBtn.style.opacity = '1';
+                        }
+                    });
+                    
+                    listContainer.appendChild(itemLabel);
+                });
+
+                if (listContainer.children.length === 0) {
+                    throw new Error("No valid candidate elements were created.");
+                }
+
+                console.log(`IDENTITY UI: Injection complete. Total children: ${listContainer.children.length}`);
+
+            } catch (error) {
+                console.error("IDENTITY UI: Rendering failed. Activating fallback. Error:", error);
+                
+                // Fallback rendering
+                listContainer.innerHTML = '';
+                const fallbackMessage = document.createElement('div');
+                fallbackMessage.style.color = 'var(--text-primary)';
+                fallbackMessage.style.marginBottom = '8px';
+                fallbackMessage.innerHTML = '<strong>Fallback Mode: Visual rendering failed. Candidates:</strong>';
+                listContainer.appendChild(fallbackMessage);
+
+                const fallbackUl = document.createElement('ul');
+                fallbackUl.style.color = 'var(--text-primary)';
+                fallbackUl.style.paddingLeft = '20px';
+                
+                candidateArray.forEach(cand => {
+                    if (!cand || !cand.course) return;
+                    const li = document.createElement('li');
+                    li.textContent = `${cand.course.title} (${Math.round((cand.score || 0) * 100)}%) - ID: ${cand.course.id}`;
+                    fallbackUl.appendChild(li);
+                });
+                
+                listContainer.appendChild(fallbackUl);
+
+                // Disable merge since radio buttons aren't reliable in fallback
+                if (targetInstruction) {
+                    targetInstruction.innerHTML = '<span style="color: #cf6679"><i class="bx bx-error-circle"></i> UI Error: Please cancel and create new course manually.</span>';
+                    targetInstruction.style.display = 'block';
+                }
+            }
+        }
+
+        if (this.identityModal) {
+            this.identityModal.classList.remove('closing');
+            this.identityModal.classList.add('active');
+        }
+    }
+
+    async executeCreateNewFromSyllabus(payload) {
+        const id = 'course_' + Date.now() + Math.random().toString(36).substring(2, 7);
+        const newCourse = {
+            id,
+            title: payload.courseInfo.cleanName || payload.courseInfo.moodleName,
+            nekaz: 0, 
+            officialGrade: null,
+            gradingPolicy: 'last_counts',
+            isConfigured: true,
+            gradeComponents: payload.gradeComponents.map(c => ({
+                name: c.name,
+                weight: parseFloat(c.weight) || 0,
+                isShield: !!c.isShield,
+                score: null,
+                minPassGrade: c.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE
+            })),
+            topics: payload.topics || [],
+            syllabusUrl: payload.courseInfo.originalSyllabusUrl,
+            lecturer: payload.courseInfo.staff?.lecturer || null,
+            ta: payload.courseInfo.staff?.ta || null
+        };
+
+        await storage.saveCourse(newCourse);
+        window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
+        await this.loadData();
+        this.showToast(`✨ ${newCourse.title} added via AI.`);
+    }
+
+    async executeSurgicalMerge(payload, course) {
+        this.showToast(`Merging AI data into ${course.title}...`);
+        await this.applyAgentResultsToCourse(course, payload);
+        window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
     }
 }
 
