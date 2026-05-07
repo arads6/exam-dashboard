@@ -1,6 +1,7 @@
 // Abstract Storage API
 // Upgraded to handle dual-schema (Courses and Exams) with auto-migration from legacy V1
 import { CourseMatcher } from './utils/course_matcher.js';
+import { GradeEngine } from './analytics/grade_engine.js';
 
 class ExamStorage {
     constructor() {
@@ -92,6 +93,12 @@ class ExamStorage {
         store.courses.forEach(c => {
             if (!c.minPassGrade || c.minPassGrade === 60) {
                 c.minPassGrade = 56;
+                changed = true;
+            }
+            
+            // ETL Transformation Backfill
+            if (c.term && typeof c.term === 'string') {
+                c.term = GradeEngine.normalizeTermData(c.term);
                 changed = true;
             }
         });
@@ -215,6 +222,11 @@ class ExamStorage {
         if (course.gradingPolicy === undefined) course.gradingPolicy = 'last_counts';
         if (course.isBinary === undefined) course.isBinary = false;
         
+        // ETL Transformation
+        if (course.term && typeof course.term === 'string') {
+            course.term = GradeEngine.normalizeTermData(course.term);
+        }
+        
         store.courses.push(course);
         await this._saveStore(store);
         return course;
@@ -229,6 +241,11 @@ class ExamStorage {
             if (updatedCourse.isConfigured === undefined) updatedCourse.isConfigured = false;
             if (updatedCourse.gradingPolicy === undefined) updatedCourse.gradingPolicy = 'last_counts';
             if (updatedCourse.isBinary === undefined) updatedCourse.isBinary = false;
+            
+            // ETL Transformation
+            if (updatedCourse.term && typeof updatedCourse.term === 'string') {
+                updatedCourse.term = GradeEngine.normalizeTermData(updatedCourse.term);
+            }
             
             store.courses[index] = updatedCourse;
             await this._saveStore(store);

@@ -249,9 +249,12 @@
                         <i class='bx bx-edit-alt' style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); opacity: 0.5; pointer-events: none; font-size: 1.1rem;"></i>
                     </div>
                 </div>
-                <!-- Credits Edit Field in Header -->
+                <!-- Term & Credits Edit Field in Header -->
                 <div style="display: flex; align-items: center; gap: 8px; margin-right: 16px; padding: 0 16px; border-right: 1px solid var(--border-color); border-left: 1px solid var(--border-color);">
-                    <label for="grade-builder-nekaz" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0;">Credits:</label>
+                    <label for="grade-builder-term" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0;">Term:</label>
+                    <input type="text" id="grade-builder-term" placeholder="e.g. תשפד אביב" style="width: 110px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-primary); font-weight: 700; text-align: center;">
+                    
+                    <label for="grade-builder-nekaz" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0; margin-left: 8px;">Credits:</label>
                     <input type="number" id="grade-builder-nekaz" step="0.5" min="0" style="width: 60px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-primary); font-weight: 700; text-align: center;">
                 </div>
                 <button class="icon-btn" id="close-grade-builder-btn"><i class='bx bx-x'></i></button>

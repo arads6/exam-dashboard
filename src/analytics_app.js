@@ -637,6 +637,10 @@ class AnalyticsApp {
                                 existing.gradeComponents = [{ name: 'BGU Sync', weight: 100, score: c.score, isShield: false }];
                             }
                             
+                            if (c.term && c.term !== 'General') {
+                                existing.term = c.term;
+                            }
+                            
                             await storage.updateCourse(existing);
                             updated++;
                         }
@@ -652,7 +656,8 @@ class AnalyticsApp {
                             gradingPolicy: 'last_counts',
                             minPassGrade: GradeEngine.DEFAULT_MIN_PASS_GRADE,
                             gradeComponents: [{ name: 'BGU Sync', weight: 100, score: c.score, isShield: false }],
-                            semester: 'General'
+                            semester: 'General',
+                            term: c.term || 'General'
                         };
                         await storage.saveCourse(newCourse);
                         added++;
@@ -663,6 +668,12 @@ class AnalyticsApp {
                 this.isSyncing = false; // Phase 11: Release lock on commit
                 await this.loadData();
                 this.updateGlobalGPA(); // Ensure everything syncs visually
+                
+                // If this was an extension auto-sync, return focus back to the portal by closing this tab
+                if (this.wasAutoSynced) {
+                    this.wasAutoSynced = false;
+                    setTimeout(() => window.close(), 800);
+                }
             });
         }
     }
@@ -670,13 +681,10 @@ class AnalyticsApp {
     triggerGradeImport(payload, isAutoSync = false) {
         if (!payload || !Array.isArray(payload) || this.isSyncing) return;
         
-        // Phase 11.5: Enforce strict session guard to prevent extension refresh loops
+        // Phase 11.5: Clear persistent storage to prevent refresh loops
         if (isAutoSync) {
-            if (sessionStorage.getItem('student_os_import_triggered')) {
-                window.localStorage.removeItem('STUDENT_OS_PENDING_SYNC');
-                return;
-            }
-            sessionStorage.setItem('student_os_import_triggered', 'true');
+            window.localStorage.removeItem('STUDENT_OS_PENDING_SYNC');
+            this.wasAutoSynced = true;
         }
         
         this.isSyncing = true; // Phase 11: Activate lock
@@ -1026,6 +1034,11 @@ class AnalyticsApp {
         if (this.gradeBuilderCourseNameInput) this.gradeBuilderCourseNameInput.value = course.title;
         if (this.gradeBuilderNekaz) this.gradeBuilderNekaz.value = course.nekaz || 0;
         
+        this.gradeBuilderTerm = document.getElementById('grade-builder-term');
+        if (this.gradeBuilderTerm) {
+            this.gradeBuilderTerm.value = (course.term && typeof course.term === 'object') ? course.term.term_raw : (course.term || 'General');
+        }
+        
         // Deep clone components to temp
         this.tempComponents = course.gradeComponents ? JSON.parse(JSON.stringify(course.gradeComponents)) : [];
         
@@ -1097,6 +1110,9 @@ class AnalyticsApp {
             }
             if (this.gradeBuilderNekaz) {
                 course.nekaz = parseFloat(this.gradeBuilderNekaz.value) || 0;
+            }
+            if (this.gradeBuilderTerm && this.gradeBuilderTerm.value) {
+                course.term = this.gradeBuilderTerm.value.trim();
             }
             course.gradeComponents = this.tempComponents;
             course.isConfigured = true;
@@ -1320,9 +1336,12 @@ class AnalyticsApp {
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div style="padding-left: ${this.isSelectionMode ? '16px' : '0'}; transition: padding 0.2s;">
                                 <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 4px;">${this.escapeHTML(courseTitle)}</h3>
-                                <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                                     <span class="credit-badge-actionable" data-courseid="${course.id}" style="font-size: 0.85rem; color: var(--text-secondary);">
                                         <i class='bx bx-coin-stack'></i> ${courseNekaz || 0} Nekaz
+                                    </span>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
+                                        <i class='bx bx-time-five'></i> ${course.term && typeof course.term === 'object' ? this.escapeHTML(course.term.term_raw) : 'General'}
                                     </span>
                                     ${gradeDisplay || ''}
                                 </div>
@@ -1683,33 +1702,44 @@ class AnalyticsApp {
         const canvas = document.getElementById('semester-trend-chart');
         if (!canvas) return;
 
-        // Group active courses by detected semester
         const semesterBuckets = {};
+        const bucketLabels = {}; // Store the best string representation for the bucket
+        const bucketTime = {}; // Store the term_id for sorting
+        
         const passedCourses = activeCourses.filter(c => {
             const grade = GradeEngine.calculateFinalGrade(c);
             return grade !== null && grade >= (c.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE);
         });
 
         passedCourses.forEach(course => {
-            const sem = GradeEngine.detectSemester(course, this.exams);
-            if (!semesterBuckets[sem]) semesterBuckets[sem] = [];
-            semesterBuckets[sem].push(course);
+            // Check if course has the new ETL term structure
+            const hasETL = course.term && typeof course.term === 'object' && course.term.term_raw;
+            const termRaw = hasETL ? course.term.term_raw : GradeEngine.detectSemester(course, this.exams);
+            const termId = hasETL ? course.term.term_id : 0;
+            
+            // SMART GROUPING: Use mathematical ID if available, fallback to string if 0.
+            const bucketKey = termId > 0 ? termId.toString() : termRaw;
+            
+            if (!semesterBuckets[bucketKey]) {
+                semesterBuckets[bucketKey] = [];
+                bucketLabels[bucketKey] = termRaw;
+                bucketTime[bucketKey] = termId;
+            } else {
+                // Heuristic: Prefer strings with punctuation (like "תשפ"ו") over flat strings ("תשפו") for the display label
+                if (termRaw.includes('"') && !bucketLabels[bucketKey].includes('"')) {
+                    bucketLabels[bucketKey] = termRaw;
+                }
+            }
+            
+            semesterBuckets[bucketKey].push(course);
         });
 
-        // Time sorting mapping
+        // Time sorting mapping based purely on term_id
         const order = Object.keys(semesterBuckets).map(key => {
-            let earliest = Infinity;
-            semesterBuckets[key].forEach(c => {
-                const exams = this.exams.filter(e => e.courseId === c.id || (e.courseTitle && e.courseTitle.includes(c.title)));
-                exams.forEach(e => {
-                    const d = new Date(e.date).getTime();
-                    if (d < earliest) earliest = d;
-                });
-            });
-            return { key, time: earliest === Infinity ? 0 : earliest };
+            return { key, label: bucketLabels[key], time: bucketTime[key] };
         });
         
-        order.sort((a,b) => a.time - b.time); // sorted chronologically
+        order.sort((a,b) => a.time - b.time); // sorted mathematically by term_id
         
         const labels = [];
         const dataPoints = [];
@@ -1717,7 +1747,7 @@ class AnalyticsApp {
         let cumulativeCourses = [];
         
         order.forEach(item => {
-            labels.push(item.key);
+            labels.push(item.label);
             cumulativeCourses = cumulativeCourses.concat(semesterBuckets[item.key]);
             const stats = GradeEngine.calculateGPA(cumulativeCourses, true);
             dataPoints.push(stats.gpa);
@@ -1779,8 +1809,6 @@ class AnalyticsApp {
                 color: '#b3b3b3',
                 scales: {
                     y: {
-                        min: 50,
-                        max: 100,
                         grid: { color: 'rgba(255,255,255,0.05)' }
                     },
                     x: {

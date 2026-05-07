@@ -190,12 +190,75 @@ export class GradeEngine {
     }
 
     /**
+     * ETL Transformer: Normalizes a raw academic term string into a structured data object.
+     * Extracts Hebrew year, semester mapping, and calculates a chronological term_id.
+     */
+    static normalizeTermData(rawTermStr) {
+        // Fail-Safe Default
+        const defaultTerm = { term_raw: rawTermStr || 'General', term_id: 0, academic_year: 0, semester: 0 };
+        if (!rawTermStr || typeof rawTermStr !== 'string' || rawTermStr === 'General') return defaultTerm;
+
+        // Sanitization: Strip quotes and normalize spaces
+        const cleanStr = rawTermStr.replace(/["']/g, '').replace(/\s+/g, ' ').trim();
+
+        let yearVal = 0;
+        let semVal = 0;
+
+        // Year Extraction (Prioritize longest prefix first)
+        const hebrewYears = [
+            ['תשפט', 2029], ['תשפח', 2028], ['תשפז', 2027], ['תשפו', 2026], 
+            ['תשפה', 2025], ['תשפד', 2024], ['תשפג', 2023], ['תשפב', 2022], 
+            ['תשפא', 2021], ['תשץ', 2030], ['תשפ', 2020]
+        ];
+        for (const [key, val] of hebrewYears) {
+            if (cleanStr.includes(key)) {
+                yearVal = val;
+                break;
+            }
+        }
+        
+        // Fallback to Gregorian year if Hebrew year not found
+        if (yearVal === 0) {
+            const numMatch = cleanStr.match(/20\d{2}/);
+            if (numMatch) {
+                yearVal = parseInt(numMatch[0], 10);
+            }
+        }
+
+        // Semester Dictionary Mapping
+        const semGroup1 = ["א", "סתו", "סתיו", "חורף", "a", "fall"];
+        const semGroup2 = ["ב", "אביב", "b", "spring"];
+        const semGroup3 = ["קיץ", "ג", "summer", "c"];
+
+        const words = cleanStr.toLowerCase().split(/[\s/\-()]+/);
+        
+        for (const word of words) {
+            if (semGroup1.includes(word)) { semVal = 1; break; }
+            if (semGroup2.includes(word)) { semVal = 2; break; }
+            if (semGroup3.includes(word)) { semVal = 3; break; }
+        }
+
+        // Return structured object
+        return {
+            term_raw: rawTermStr,
+            term_id: (yearVal > 0 && semVal > 0) ? (yearVal * 10) + semVal : 0,
+            academic_year: yearVal,
+            semester: semVal
+        };
+    }
+
+    /**
      * Enhanced Semester Detection (Smart Fallback)
      */
     static detectSemester(course, allExams) {
         if (!course) return 'General';
 
-        // Priority 1: Native Portal / AI Term Payload
+        // Priority 1: Normalized ETL Term Object
+        if (course.term && typeof course.term === 'object' && course.term.term_raw) {
+             return course.term.term_raw;
+        }
+
+        // Priority 2: Native Portal / AI Term Payload (Legacy string)
         if (course.term && typeof course.term === 'string' && course.term !== 'General') {
              return course.term;
         } else if (course.term && typeof course.term === 'object') {
@@ -204,7 +267,7 @@ export class GradeEngine {
              if (year || sem) return `${year} ${sem}`.trim();
         }
 
-        // Priority 2: Semantic Name Analysis (Hebrew / English)
+        // Priority 3: Semantic Name Analysis (Hebrew / English)
         const title = (course.title || '').toUpperCase();
         
         // Match explicit words
@@ -216,7 +279,7 @@ export class GradeEngine {
         if (/\bא[']?\b$/.test(cleanTitle)) return 'A';
         if (/\bב[']?\b$/.test(cleanTitle)) return 'B';
 
-        // Priority 2: Exam Dates
+        // Priority 4: Exam Dates
         if (allExams && allExams.length > 0) {
             const courseExams = allExams.filter(e => e.courseId === course.id || (e.courseTitle && e.courseTitle.includes(course.title)));
             if (courseExams.length > 0) {
@@ -231,7 +294,7 @@ export class GradeEngine {
             }
         }
 
-        // Priority 3: Manual or General
+        // Priority 5: Manual or General
         return course.semester || 'General';
     }
 

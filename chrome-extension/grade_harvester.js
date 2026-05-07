@@ -122,7 +122,7 @@
                 
                 // If this is a header candidate, check for academic term syntax
                 if (!el.matches('mat-row.mat-mdc-row, [role="row"]') || el.tagName === 'TR' || el.classList.contains('table-description')) {
-                     if (rawText.length < 100 && /(תש[א-ת]|202[0-9])/i.test(rawText) && /(סתו|אביב|קיץ|A|B|Summer|Fall|Spring)/i.test(rawText)) {
+                     if (rawText.length < 100 && /(תש[א-ת]|202[0-9])/i.test(rawText) && /(סמסטר|סתו|אביב|קיץ|A|B|Summer|Fall|Spring)/i.test(rawText)) {
                          currentTerm = rawText;
                      }
                 }
@@ -143,7 +143,7 @@
 
                 // Clean Title Extraction
                 const title = nameEl.innerText.trim();
-                if (!title || title === "שם הקורס" || title.includes("סיכום")) {
+                if (!title || title === "שם הקורס" || title.includes("סיכום") || title.includes('סה"כ') || title.includes("סה״כ") || el.matches('mat-footer-row, .mat-mdc-footer-row')) {
                     return; // Skip headers or summary rows
                 }
 
