@@ -1,5 +1,7 @@
 import { storage } from './storage.js';
 import { aiService } from './ai_service.js';
+import { apiModalManager } from './api_modal_manager.js';
+import { themeManager } from './theme_manager.js';
 
 class App {
     constructor() {
@@ -69,8 +71,6 @@ class App {
         this.pendingAgentResponse = null;
         this.pendingMatchedCourse = null;
 
-        // API Key Modal managed by apiModalManager
-
         this.currentChecklist = [];
         this.exams = [];
         this.countdownIntervals = {};
@@ -122,6 +122,7 @@ class App {
 
     async init() {
         console.log("APP: Initializing Dashboard logic...");
+        themeManager.init();
         this.checkPostBox(); // Priority 1: Check mailbox before anything else
         
         this.bindEvents();
@@ -286,19 +287,6 @@ class App {
         }
     }
 
-    openEditModal(id) {
-        const exam = this.exams.find(e => e.id === id);
-        if (!exam) return;
-
-        this.editingExamId = id;
-        if (this.modalTitle) this.modalTitle.textContent = 'Edit Exam';
-
-        // ... rest of openEditModal
-    }
-
-    // --- API Key Modal Methods --- //
-
-    // API Modal methods removed - handled by apiModalManager
     openEditModal(id) {
         const exam = this.exams.find(e => e.id === id);
         if (!exam) return;
@@ -534,12 +522,6 @@ class App {
         this.render();
     }
 
-    isSimilarMatch(str1, str2) {
-        const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return s1.includes(s2) || s2.includes(s1) || (s1.length > 3 && s2.length > 3 && (s1.substring(0, 3) === s2.substring(0, 3)));
-    }
-
     bindEvents() {
         if (this.addBtn) this.addBtn.addEventListener('click', () => {
             this.closeModal();
@@ -681,8 +663,6 @@ class App {
                 }
             }
         });
-
-        // API Key Modal Listeners removed - handled by apiModalManager (Stage 6.6+)
 
         // Close on outside click
         window.addEventListener('click', (e) => {

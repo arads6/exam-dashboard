@@ -2,6 +2,7 @@ import { storage } from './storage.js';
 import { GradeEngine } from './analytics/grade_engine.js';
 import { ImportEngine } from './analytics/import_engine.js';
 import { CourseMatcher } from './utils/course_matcher.js';
+import { themeManager } from './theme_manager.js';
 
 class AnalyticsApp {
     constructor() {
@@ -41,12 +42,6 @@ class AnalyticsApp {
         this.totalWeightDisplay = document.getElementById('total-weight-display');
         this.gradeBuilderCourseNameInput = document.getElementById('grade-builder-course-name-input');
         this.gradeBuilderNekaz = document.getElementById('grade-builder-nekaz');
-        
-        // Phase 11.3: Settings UI
-        this.settingsModal = document.getElementById('dashboard-settings-modal');
-        this.closeSettingsBtn = document.getElementById('close-settings-modal-btn');
-        this.saveSettingsBtn = document.getElementById('save-settings-btn');
-        this.prefEnglishExemption = document.getElementById('pref-english-exemption');
 
         this.currentEditingCourseId = null;
         this.tempComponents = [];
@@ -105,6 +100,8 @@ class AnalyticsApp {
 
     async init() {
         console.log("APP: Initializing Analytics Hub logic...");
+        themeManager.init();
+        this.setupSettings();
         this.checkPostBox(); // Priority 1: Check mailbox before anything else
         
         try {
@@ -113,36 +110,41 @@ class AnalyticsApp {
             console.warn("Analytics logic module missing:", e);
         }
 
-        // Phase 9: Inject Simulation Toggle UI into Header
+        // Phase 9: Inject Simulation Toggle UI into Header — inside header-actions-wrapper, before the cog
         const header = document.querySelector('.app-header');
         if (header) {
             const toggleWrapper = document.createElement('div');
-            toggleWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 8px; width: fit-content;';
+            toggleWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px;';
             toggleWrapper.innerHTML = `
                 <i class='bx bx-flask' style="font-size: 1.2rem; color: var(--text-secondary);"></i>
                 <span id="sim-mode-label" style="font-size: 0.9rem; font-weight: 500; margin-right: 8px; color: var(--text-secondary);">Simulation: <strong style="color:var(--text-primary)">OFF</strong></span>
-                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
-                    <input type="checkbox" id="sim-mode-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .4s; border-radius: 24px;"></span>
+                <label class="modern-toggle-wrapper" style="cursor:pointer;">
+                    <input type="checkbox" class="modern-toggle-input" id="sim-mode-toggle">
+                    <span class="modern-toggle-slider"></span>
                 </label>
-                <button id="clear-library-btn" class="secondary-btn" style="margin-left: 16px; border-color: rgba(207, 102, 121, 0.3); color: #cf6679; padding: 4px 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                <button id="clear-library-btn" class="secondary-btn" style="margin-left: 12px; border-color: rgba(207, 102, 121, 0.3); color: #cf6679; padding: 4px 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
                     <i class='bx bx-trash' style="font-size: 0.9rem;"></i> Clear Library
                 </button>
-                <button id="selection-toggle-btn" class="secondary-btn" style="margin-left: 12px; border-color: var(--text-secondary); color: var(--text-secondary); padding: 4px 12px; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 4px; border-radius: 6px;">
+                <button id="selection-toggle-btn" class="secondary-btn" style="margin-left: 8px; border-color: var(--text-secondary); color: var(--text-secondary); padding: 4px 12px; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 4px; border-radius: 6px;">
                     <i class='bx bx-check-square'></i> Select
                 </button>
                 <button id="select-all-toggle-btn" class="secondary-btn" style="display: none; margin-left: 8px; border-color: var(--text-secondary); color: var(--text-secondary); padding: 4px 12px; font-size: 0.8rem; font-weight: 600; align-items: center; gap: 4px; border-radius: 6px;">
                     <i class='bx bx-list-check'></i> Select All
                 </button>
-                <button id="delete-selected-btn" class="secondary-btn" style="display: none; margin-left: 12px; border-color: #cf6679; background: rgba(207, 102, 121, 0.05); color: #cf6679; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; align-items: center; gap: 4px; border-radius: 6px;">
+                <button id="delete-selected-btn" class="secondary-btn" style="display: none; margin-left: 8px; border-color: #cf6679; background: rgba(207, 102, 121, 0.05); color: #cf6679; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; align-items: center; gap: 4px; border-radius: 6px;">
                     <i class='bx bx-check-double'></i> Delete Selected (<span id="selected-count">0</span>)
                 </button>
-                <div style="flex: 1;"></div>
-                <button id="open-settings-btn" class="icon-btn" style="color: var(--text-secondary); font-size: 1.4rem; padding: 8px; transition: all 0.2s;" title="Dashboard Settings">
-                    <i class='bx bx-cog'></i>
-                </button>
             `;
-            header.appendChild(toggleWrapper);
+
+            // Inject BEFORE the cog slot so order is: sim-controls → cog (last)
+            const actionsWrapper = header.querySelector('.header-actions-wrapper');
+            const cogSlot = header.querySelector('.header-settings-container');
+            if (actionsWrapper && cogSlot) {
+                actionsWrapper.insertBefore(toggleWrapper, cogSlot);
+            } else {
+                header.appendChild(toggleWrapper); // fallback
+            }
+
 
             // Simulation Control Bar injected into App Container
             const controlBar = document.createElement('div');
@@ -460,38 +462,47 @@ class AnalyticsApp {
             }, 50);
         });
 
-        // Settings Modal Events (Phase 11.3)
-        const openSettingsBtn = document.getElementById('open-settings-btn');
-        if (openSettingsBtn) {
-            openSettingsBtn.addEventListener('click', () => {
-                const currentPref = !!this.courses.find(c => c.isExemption && c.title.toLowerCase().includes('english'));
-                if (this.prefEnglishExemption) this.prefEnglishExemption.checked = currentPref;
-                this.settingsModal.classList.add('active');
-            });
-        }
-
-        if (this.closeSettingsBtn) {
-            this.closeSettingsBtn.addEventListener('click', () => this.settingsModal.classList.remove('active'));
-        }
-
-        if (this.saveSettingsBtn) {
-            this.saveSettingsBtn.addEventListener('click', async () => {
-                const desired = this.prefEnglishExemption.checked;
-                this.prefs.englishExemption = desired;
-                localStorage.setItem('student_os_prefs', JSON.stringify(this.prefs));
-                
-                await this.syncEnglishExemption(desired);
-                
-                this.settingsModal.classList.remove('active');
-                this.showToast("⚙️ Preferences saved.");
-            });
-        }
-
         this.bindImportEvents();
         
         // Signal to Extension Courier that we are ready to receive any pending data
         window.postMessage({ type: 'STUDENT_OS_APP_READY' }, '*');
     }
+
+    setupSettings() {
+        const englishExemptionHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <div style="flex: 1;">
+                    <h4 style="margin: 0 0 4px; font-size: 1rem; color: var(--text-primary);">English Exemption (2 Units)</h4>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.4;">Add 2 bonus units for English 'Ptor' status. These units count towards your total but do not affect your GPA.</p>
+                </div>
+                <label class="modern-toggle-wrapper" style="margin-left: 16px;">
+                    <input type="checkbox" class="modern-toggle-input" id="pref-english-exemption">
+                    <span class="modern-toggle-slider"></span>
+                </label>
+            </div>
+        `;
+        
+        themeManager.addPageSpecificSetting(
+            englishExemptionHtml,
+            () => { // onInit
+                const currentPref = !!this.courses.find(c => c.isExemption && c.title.toLowerCase().includes('english'));
+                const checkbox = document.getElementById('pref-english-exemption');
+                if (checkbox) checkbox.checked = currentPref;
+            },
+            async () => { // onSave
+                const checkbox = document.getElementById('pref-english-exemption');
+                if (checkbox) {
+                    const desired = checkbox.checked;
+                    this.prefs.englishExemption = desired;
+                    localStorage.setItem('student_os_prefs', JSON.stringify(this.prefs));
+                    await this.syncEnglishExemption(desired);
+                }
+            },
+            () => { // onCancel — reverts automatically
+            }
+        );
+    }
+
 
     bindIdentityEvents() {
         if (this.closeIdentityBtn) this.closeIdentityBtn.onclick = () => this.closeIdentityModal();

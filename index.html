@@ -2,6 +2,10 @@
 <html lang="en">
 
 <head>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exam Study Dashboard</title>
@@ -14,6 +18,7 @@
 
 <body>
     <div class="app-layout">
+
         <!-- Persistent Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-logo">
@@ -45,23 +50,29 @@
                     <h1>Exam Dashboard</h1>
                     <p>Track your schedule and stay focused on action items.</p>
                 </div>
-                
-                <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
-                    <button id="smart-import-btn" class="secondary-btn" title="AI Import">
-                        <i class='bx bx-sparkles'></i> Smart Import
-                    </button>
-                    <button id="open-vault-btn" class="icon-btn" title="Special Dates"
-                        style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px;">
-                        <i class='bx bx-star'></i>
-                    </button>
-                    <button id="header-sync-btn" class="secondary-btn" title="Calendar Sync">
-                        <i class='bx bx-calendar-event'></i> Sync
-                    </button>
-                    <button id="add-exam-btn" class="primary-btn">
-                        <i class='bx bx-plus'></i> Add Exam
-                    </button>
+
+                <!-- Unified right-side flex container: buttons + cog -->
+                <div class="header-actions-wrapper">
+                    <div class="header-actions">
+                        <button id="smart-import-btn" class="secondary-btn" title="AI Import">
+                            <i class='bx bx-sparkles'></i> Smart Import
+                        </button>
+                        <button id="open-vault-btn" class="icon-btn" title="Special Dates"
+                            style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px;">
+                            <i class='bx bx-star'></i>
+                        </button>
+                        <button id="header-sync-btn" class="secondary-btn" title="Calendar Sync">
+                            <i class='bx bx-calendar-event'></i> Sync
+                        </button>
+                        <button id="add-exam-btn" class="primary-btn">
+                            <i class='bx bx-plus'></i> Add Exam
+                        </button>
+                    </div>
+                    <!-- ThemeManager injects the cog button here -->
+                    <div class="header-settings-container"></div>
                 </div>
             </header>
+
 
         <main class="dashboard">
             <!-- Time Filters Control Bar -->
@@ -292,6 +303,7 @@
         </div>
     </div>
 
+    <script type="module" src="./src/theme_manager.js"></script>
     <script type="module" src="./src/app.js?v=3"></script>
     <script type="module" src="./src/google_sync.js"></script>
     <script type="module" src="./src/api_modal_manager.js"></script>

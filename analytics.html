@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics Hub | Student OS</title>
     <!-- Boxicons -->
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-    <!-- Scripts -->
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <!-- Styles -->
@@ -46,6 +49,10 @@
                 <div class="header-content">
                     <h1>Insights Hub</h1>
                     <p>Course management, GPA tracking, and performance analytics.</p>
+                </div>
+                <!-- Unified right-side flex container: cog (ThemeManager injects here) -->
+                <div class="header-actions-wrapper">
+                    <div class="header-settings-container"></div>
                 </div>
             </header>
 
@@ -358,38 +365,6 @@
     </div>
 
 
-    <!-- Dashboard Settings Modal (Phase 11.3) -->
-    <div class="modal" id="dashboard-settings-modal">
-        <div class="modal-content" style="max-width: 450px;">
-            <div class="modal-header">
-                <h2>Dashboard Preferences</h2>
-                <button class="icon-btn" id="close-settings-modal-btn"><i class='bx bx-x'></i></button>
-            </div>
-            
-            <div style="padding: 20px 0;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
-                    <div>
-                        <h4 style="margin: 0; font-size: 1rem; color: var(--text-primary);">English Exemption (2 Units)</h4>
-                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">Add 2 bonus units for English 'Ptor' status. These units count towards your total but do not affect your GPA.</p>
-                    </div>
-                    <label class="switch" style="position: relative; display: inline-block; width: 50px; height: 26px; flex-shrink: 0;">
-                        <input type="checkbox" id="pref-english-exemption" style="opacity: 0; width: 0; height: 0;">
-                        <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .4s; border-radius: 26px;"></span>
-                    </label>
-                </div>
-
-                <div style="padding: 16px; background: rgba(187, 134, 252, 0.05); border: 1px solid rgba(187, 134, 252, 0.2); border-radius: 12px; margin-top: 12px;">
-                    <p style="font-size: 0.8rem; color: var(--text-secondary); font-style: italic; margin: 0;">
-                        More professional preferences coming soon...
-                    </p>
-                </div>
-            </div>
-
-            <div class="modal-footer" style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                <button id="save-settings-btn" class="primary-btn" style="padding: 10px 32px;">Save Preferences</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Identity Resolution Modal (Similarity Match) -->
     <div id="identity-modal" class="modal">
