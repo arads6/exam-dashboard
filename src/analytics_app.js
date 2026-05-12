@@ -1745,7 +1745,13 @@ class AnalyticsApp {
         
         const passedCourses = activeCourses.filter(c => {
             const grade = GradeEngine.calculateFinalGrade(c);
-            return grade !== null && grade >= (c.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE);
+            const hasPassingGrade = grade !== null && grade >= (c.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE);
+            const isNotExemption = c.isExemption !== true;
+            
+            const termStr = (c.term && typeof c.term === 'object') ? c.term.term_raw : (c.term || 'General');
+            const hasValidTerm = termStr !== 'General';
+            
+            return hasPassingGrade && isNotExemption && hasValidTerm;
         });
 
         passedCourses.forEach(course => {
