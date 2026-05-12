@@ -1049,6 +1049,11 @@ class AnalyticsApp {
         if (this.gradeBuilderTerm) {
             this.gradeBuilderTerm.value = (course.term && typeof course.term === 'object') ? course.term.term_raw : (course.term || 'General');
         }
+
+        this.gradeBuilderOverride = document.getElementById('grade-builder-override');
+        if (this.gradeBuilderOverride) {
+            this.gradeBuilderOverride.value = course.userOverrideGrade !== null && course.userOverrideGrade !== undefined ? course.userOverrideGrade : '';
+        }
         
         // Deep clone components to temp
         this.tempComponents = course.gradeComponents ? JSON.parse(JSON.stringify(course.gradeComponents)) : [];
@@ -1125,6 +1130,21 @@ class AnalyticsApp {
             if (this.gradeBuilderTerm && this.gradeBuilderTerm.value) {
                 course.term = this.gradeBuilderTerm.value.trim();
             }
+
+            if (this.gradeBuilderOverride) {
+                const overrideVal = this.gradeBuilderOverride.value.trim();
+                if (overrideVal === '') {
+                    course.userOverrideGrade = null;
+                } else {
+                    const parsed = parseFloat(overrideVal);
+                    if (isNaN(parsed) || parsed < 0) {
+                        alert("Invalid override input: Please enter a valid positive number or leave it blank.");
+                        return;
+                    }
+                    course.userOverrideGrade = parsed;
+                }
+            }
+
             course.gradeComponents = this.tempComponents;
             course.isConfigured = true;
             await storage.updateCourse(course);
@@ -1262,9 +1282,15 @@ class AnalyticsApp {
                         if (finalGrade < 56) gradeColor = 'var(--error-color)';
                         else if (finalGrade < 60) gradeColor = '#ffb74d';
 
+                        let overrideBadge = course.userOverrideGrade !== undefined && course.userOverrideGrade !== null ? 
+                            `<span style="background: rgba(187, 134, 252, 0.2); color: #bb86fc; font-size: 0.6rem; padding: 2px 4px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Override</span>` : '';
+
                         gradeDisplay = `
                             <div style="display: flex; align-items: center;">
-                                <div id="final-grade-${course.id}" style="font-size: 1.2rem; font-weight: 700; color: ${gradeColor};">${finalGrade.toFixed(1)}</div>
+                                <div id="final-grade-${course.id}" style="font-size: 1.2rem; font-weight: 700; color: ${gradeColor};">
+                                    ${finalGrade.toFixed(1)}
+                                </div>
+                                ${overrideBadge}
                                 ${statusBadge}
                             </div>
                         `;

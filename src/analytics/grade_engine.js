@@ -17,12 +17,17 @@ export class GradeEngine {
     static calculateFinalGrade(course) {
         if (!course) return null;
         
-        // 1. Source of Truth: The University Portal Overrides All
+        // 1. User Override
+        if (course.userOverrideGrade !== undefined && course.userOverrideGrade !== null) {
+            return GradeEngine.clampGrade(course.userOverrideGrade);
+        }
+
+        // 2. Source of Truth: The University Portal Overrides All
         if (course.officialGrade !== undefined && course.officialGrade !== null) {
             return GradeEngine.clampGrade(course.officialGrade);
         }
 
-        // 2. Fallback to Local Computation
+        // 3. Fallback to Local Computation
         return GradeEngine.calculateComputedGrade(course);
     }
 

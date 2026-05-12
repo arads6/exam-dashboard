@@ -221,6 +221,7 @@ class ExamStorage {
         if (course.isConfigured === undefined) course.isConfigured = false;
         if (course.gradingPolicy === undefined) course.gradingPolicy = 'last_counts';
         if (course.isBinary === undefined) course.isBinary = false;
+        if (course.userOverrideGrade === undefined) course.userOverrideGrade = null;
         
         // ETL Transformation
         if (course.term && typeof course.term === 'string') {
@@ -241,6 +242,7 @@ class ExamStorage {
             if (updatedCourse.isConfigured === undefined) updatedCourse.isConfigured = false;
             if (updatedCourse.gradingPolicy === undefined) updatedCourse.gradingPolicy = 'last_counts';
             if (updatedCourse.isBinary === undefined) updatedCourse.isBinary = false;
+            if (updatedCourse.userOverrideGrade === undefined) updatedCourse.userOverrideGrade = null;
             
             // ETL Transformation
             if (updatedCourse.term && typeof updatedCourse.term === 'string') {
