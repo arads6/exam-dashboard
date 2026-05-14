@@ -248,6 +248,57 @@ body.analytics-page .sidebar-link.active {
     box-shadow: 0 0 12px rgba(3, 218, 198, 0.2);
 }
 
+/* Labeled Selection Button */
+.select-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 2px solid var(--primary-color);
+    background: transparent;
+    color: var(--primary-color);
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Inter', sans-serif;
+}
+
+.select-action-btn:hover {
+    background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 15%, transparent);
+}
+
+/* Cloned Checkbox CSS from Analytics Page */
+.exam-checkbox {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    z-index: 10;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface-color);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.exam-checkbox:hover {
+    transform: scale(1.1);
+}
+.exam-checkbox:checked {
+    opacity: 1;
+    background: var(--primary-color);
+}
+
+/* Let the card be clickable in selection mode */
+.selection-mode-active .exam-card {
+    cursor: pointer;
+}
+
 #api-settings-btn:hover {
     background-color: rgba(187, 134, 252, 0.1);
     box-shadow: 0 0 12px rgba(187, 134, 252, 0.2);

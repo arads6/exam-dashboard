@@ -54,6 +54,14 @@
                 <!-- Unified right-side flex container: buttons + cog -->
                 <div class="header-actions-wrapper">
                     <div class="header-actions">
+                        <!-- Selection Mode Actions -->
+                        <button id="select-all-toggle-btn" class="secondary-btn" style="display: none;">
+                            <i class='bx bx-list-check'></i> Select All
+                        </button>
+                        <button id="delete-selected-btn" class="secondary-btn" style="display: none; border-color: #cf6679; background: rgba(207, 102, 121, 0.05); color: #cf6679;">
+                            <i class='bx bx-check-double'></i> Delete Selected (<span id="selected-count">0</span>)
+                        </button>
+
                         <button id="smart-import-btn" class="secondary-btn" title="AI Import">
                             <i class='bx bx-sparkles'></i> Smart Import
                         </button>
@@ -66,6 +74,9 @@
                         </button>
                         <button id="add-exam-btn" class="primary-btn">
                             <i class='bx bx-plus'></i> Add Exam
+                        </button>
+                        <button id="selection-toggle-btn" class="select-action-btn" title="Select">
+                            <i class='bx bx-check-square'></i> Select
                         </button>
                     </div>
                     <!-- ThemeManager injects the cog button here -->

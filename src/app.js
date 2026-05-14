@@ -81,6 +81,10 @@ class App {
         this.historicalGPA = 0; // State for calculated GPA
         this.isProcessingSyllabus = false; // State for AI Harvester flow (QA Review)
 
+        // Phase 2: Bulk Select State
+        this.selectedIds = new Set();
+        this.isSelectionMode = false;
+
         this.init();
     }
 
@@ -540,6 +544,16 @@ class App {
             if (this.vaultSidebar) this.vaultSidebar.classList.remove('open');
             if (this.dashboardMain) this.dashboardMain.classList.remove('vault-open');
         });
+
+        // Selection Mode Listeners
+        const selectionToggleBtn = document.getElementById('selection-toggle-btn');
+        if (selectionToggleBtn) selectionToggleBtn.addEventListener('click', () => this.toggleSelectionMode());
+
+        const selectAllBtn = document.getElementById('select-all-toggle-btn');
+        if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.handleSelectAllToggle());
+
+        const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+        if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', () => this.handleDeleteSelected());
 
         // Time Filter Listeners
         if (this.filterBtns) this.filterBtns.forEach(btn => {
@@ -1194,6 +1208,122 @@ class App {
         console.log(`[Sync] Synced checklist to ${syncedCount} other exams.`);
     }
 
+    handleCheckboxChange(id, checked) {
+        if (checked) {
+            this.selectedIds.add(id);
+        } else {
+            this.selectedIds.delete(id);
+        }
+        
+        // Update Multi-Delete Button state
+        const btn = document.getElementById('delete-selected-btn');
+        const countSpan = document.getElementById('selected-count');
+        
+        if (btn && countSpan) {
+            const count = this.selectedIds.size;
+            countSpan.textContent = count;
+            btn.style.display = (this.isSelectionMode && count > 0) ? 'flex' : 'none';
+        }
+
+        // Sync Select All button text
+        const selectAllBtn = document.getElementById('select-all-toggle-btn');
+        if (selectAllBtn) {
+            const visibleExamsCount = document.querySelectorAll('.exam-checkbox').length;
+            const allSelected = visibleExamsCount > 0 && this.selectedIds.size === visibleExamsCount;
+            selectAllBtn.innerHTML = allSelected ? `<i class='bx bx-list-minus'></i> Deselect All` : `<i class='bx bx-list-check'></i> Select All`;
+        }
+    }
+
+    toggleSelectionMode() {
+        this.isSelectionMode = !this.isSelectionMode;
+        if (!this.isSelectionMode) {
+            this.selectedIds.clear();
+        }
+        
+        const toggleBtn = document.getElementById('selection-toggle-btn');
+        const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+        const addExamBtn = document.getElementById('add-exam-btn');
+        const smartImportBtn = document.getElementById('smart-import-btn');
+        const openVaultBtn = document.getElementById('open-vault-btn');
+        const headerSyncBtn = document.getElementById('header-sync-btn');
+        const selectAllBtn = document.getElementById('select-all-toggle-btn');
+
+        if (toggleBtn) {
+            toggleBtn.innerHTML = this.isSelectionMode ? `<i class='bx bx-x'></i> Cancel` : `<i class='bx bx-check-square'></i> Select`;
+            toggleBtn.style.borderColor = '';
+            toggleBtn.style.background = '';
+            toggleBtn.style.color = '';
+            
+            if (this.isSelectionMode) {
+                toggleBtn.style.borderColor = 'var(--text-secondary)';
+                toggleBtn.style.background = 'rgba(255,255,255,0.05)';
+                toggleBtn.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        if (selectAllBtn) {
+            selectAllBtn.style.display = this.isSelectionMode ? 'flex' : 'none';
+            selectAllBtn.innerHTML = `<i class='bx bx-list-check'></i> Select All`;
+        }
+
+        if (addExamBtn) addExamBtn.style.display = this.isSelectionMode ? 'none' : 'flex';
+        if (smartImportBtn) smartImportBtn.style.display = this.isSelectionMode ? 'none' : 'flex';
+        if (openVaultBtn) openVaultBtn.style.display = this.isSelectionMode ? 'none' : 'flex';
+        if (headerSyncBtn) headerSyncBtn.style.display = this.isSelectionMode ? 'none' : 'flex';
+        
+        if (deleteSelectedBtn) {
+            deleteSelectedBtn.style.display = (this.isSelectionMode && this.selectedIds.size > 0) ? 'flex' : 'none';
+        }
+
+        // Apply state globally so all nested components (Vault, Main Grid, Closest Exam) inherit the CSS rules
+        document.body.classList.toggle('selection-mode-active', this.isSelectionMode);
+
+        this.render();
+    }
+
+    handleSelectAllToggle() {
+        // Collect all currently rendered checkboxes
+        const visibleCheckboxes = document.querySelectorAll('.exam-checkbox');
+        const visibleIds = Array.from(visibleCheckboxes).map(cb => cb.dataset.examId);
+        
+        const allSelected = visibleIds.length > 0 && visibleIds.every(id => this.selectedIds.has(id));
+        
+        if (allSelected) {
+            this.selectedIds.clear();
+        } else {
+            visibleIds.forEach(id => this.selectedIds.add(id));
+        }
+
+        this.render(); // Re-render to update UI states
+        
+        // Sync button text immediately
+        const count = this.selectedIds.size;
+        const btn = document.getElementById('delete-selected-btn');
+        const countSpan = document.getElementById('selected-count');
+        if (btn && countSpan) {
+            countSpan.textContent = count;
+            btn.style.display = (this.isSelectionMode && count > 0) ? 'flex' : 'none';
+        }
+        const selectAllBtn = document.getElementById('select-all-toggle-btn');
+        if (selectAllBtn) {
+            selectAllBtn.innerHTML = !allSelected ? `<i class='bx bx-list-minus'></i> Deselect All` : `<i class='bx bx-list-check'></i> Select All`;
+        }
+    }
+
+    async handleDeleteSelected() {
+        const count = this.selectedIds.size;
+        if (count === 0) return;
+
+        if (confirm(`Are you sure you want to delete the ${count} selected exams?`)) {
+            for (const id of this.selectedIds) {
+                await storage.deleteExam(id);
+            }
+            this.selectedIds.clear();
+            this.toggleSelectionMode(); // exits mode and triggers render
+            await this.loadExams();
+        }
+    }
+
     async deleteExam(id) {
         if (confirm('Are you sure you want to delete this exam?')) {
             await storage.deleteExam(id);
@@ -1456,6 +1586,25 @@ class App {
     }
 
     bindCardEvents(container = document) {
+        container.querySelectorAll('.exam-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                if (this.isSelectionMode) {
+                    // Don't trigger if they clicked an action button inside the card
+                    if (e.target.closest('.icon-btn') || e.target.closest('details') || e.target.tagName.toLowerCase() === 'input') {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const cb = card.querySelector('.exam-checkbox');
+                    if (cb) {
+                        cb.checked = !cb.checked;
+                        this.handleCheckboxChange(cb.dataset.examId, cb.checked);
+                    }
+                }
+            });
+        });
+
         container.querySelectorAll('.delete-exam-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent opening the Compare Modal if inside a stack
@@ -1469,6 +1618,13 @@ class App {
                 e.stopPropagation(); // Prevent opening the Compare Modal if inside a stack
                 const id = e.currentTarget.dataset.id;
                 this.openEditModal(id);
+            });
+        });
+
+        container.querySelectorAll('.exam-checkbox').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                this.handleCheckboxChange(e.target.dataset.examId, e.target.checked);
             });
         });
 
@@ -1661,15 +1817,16 @@ class App {
         return `
             <div class="${cardClass}" id="exam-${exam.id}">
                 ${miniLabelHTML}
-                <div class="card-header">
-                    <div style="width: 100%;">
+                <div class="card-header" style="position: relative; display: flex; justify-content: space-between; align-items: flex-start;">
+                    <input type="checkbox" class="exam-checkbox" data-exam-id="${exam.id}" style="display: ${this.isSelectionMode ? 'block' : 'none'};" ${this.selectedIds.has(exam.id) ? 'checked' : ''}>
+                    <div style="padding-left: ${this.isSelectionMode ? '32px' : '0'}; transition: padding 0.2s; width: 100%;">
                         <h3 class="exam-title">${displayTitle} ${moedHTML}</h3>
                         <div class="exam-date-time">
                             <span><i class='bx bx-calendar'></i> ${formattedDate}</span>
                             <span><i class='bx bx-time'></i> ${formattedTime}</span>
                         </div>
                     </div>
-                    <div class="card-actions">
+                    <div class="card-actions" style="flex-shrink: 0;">
                         <button class="icon-btn edit-btn edit-exam-btn" title="Edit Exam" data-id="${exam.id}">
                             <i class='bx bx-edit-alt'></i>
                         </button>
