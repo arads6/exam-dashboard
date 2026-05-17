@@ -14,6 +14,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <!-- Styles -->
     <link rel="stylesheet" href="./src/styles.css">
+    <!-- Scripts -->
+    <script src="./src/utils/course_matcher.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -76,12 +78,12 @@
                         <h3 id="summary-credits" style="font-size: 1.5rem; font-weight: 700;">0.0</h3>
                     </div>
                 </div>
-                <div class="summary-card" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px;">
-                    <div style="background: rgba(255, 152, 0, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #ff9800; font-size: 1.5rem;">
-                        <i class='bx bx-time-five'></i>
+                <div class="summary-card resolution-widget" id="resolution-widget" style="background: var(--surface-color); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 16px; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;">
+                    <div id="resolution-icon-wrapper" style="background: rgba(255, 152, 0, 0.1); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #ff9800; font-size: 1.5rem; transition: background 0.2s, color 0.2s;">
+                        <i class='bx bx-error-circle' id="resolution-icon"></i>
                     </div>
                     <div>
-                        <p style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Pending Grades</p>
+                        <p id="resolution-title" style="color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;">Action Required</p>
                         <h3 id="summary-pending" style="font-size: 1.5rem; font-weight: 700;">0</h3>
                     </div>
                 </div>
@@ -100,17 +102,6 @@
                 
                 <!-- Left Column: Course Management -->
                 <div class="courses-container">
-                    <!-- Stage 6.10: Action Required (Missing Credits) -->
-                    <div id="nekaz-action-section" style="display: none; margin-bottom: 32px;">
-                        <div style="background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.3); border-radius: 12px; padding: 20px;">
-                            <h3 style="font-size: 1rem; color: #ff9800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                                <i class='bx bx-error-circle'></i> Action Required: Missing Credits
-                            </h3>
-                            <div id="nekaz-action-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
-                                <!-- Action items will be injected here -->
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="courses-section" style="background: var(--surface-color); border-radius: 12px; padding: 32px; border: 1px solid var(--border-color);">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-color); padding-bottom: 24px; margin-bottom: 32px;">
@@ -229,10 +220,15 @@
                     <!-- Message injected here -->
                 </div>
 
+                <div class="form-group">
+                    <label for="course-term">Semester Term (e.g., "סמסטר א 2026")</label>
+                    <input type="text" id="course-term" placeholder="Leave blank for 'General' (Excluded from GPA)" autocomplete="off">
+                </div>
+
                 <div class="form-row" style="display: flex; gap: 12px;">
                     <div class="form-group" style="flex: 1;">
                         <label for="course-nekaz">Credits (Nekaz)</label>
-                        <input type="number" id="course-nekaz" min="0" step="0.5" placeholder="e.g., 4.5">
+                        <input type="number" id="course-nekaz" min="0" step="0.5" placeholder="e.g., 4.5 (optional)">
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label for="course-grade">Final Grade (Optional)</label>
@@ -403,6 +399,24 @@
                     <button id="new-identity-btn" class="secondary-btn" style="flex: 1;">Create as New</button>
                     <button id="cancel-identity-btn" class="danger-btn" style="flex: 1;">Discard Import</button>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="resolution-modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2><i class='bx bx-wrench' style="color: #ff9800;"></i> Resolution Center</h2>
+                <button class="icon-btn" id="close-resolution-modal-btn"><i class='bx bx-x'></i></button>
+            </div>
+            <div id="resolution-issues-list" style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; padding-right: 8px;">
+                <!-- Issues injected here -->
+            </div>
+            <div id="resolution-empty-state" style="display: none; text-align: center; padding: 32px 0; color: var(--text-secondary);">
+                <div style="background: rgba(3, 218, 198, 0.1); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--secondary-color); font-size: 2rem; margin: 0 auto 16px;">
+                    <i class='bx bx-check-shield'></i>
+                </div>
+                <h3 style="color: var(--text-primary); margin-bottom: 8px;">All caught up! 🎉</h3>
+                <p>There are no pending issues in your library.</p>
             </div>
         </div>
     </div>

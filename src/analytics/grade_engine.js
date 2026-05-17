@@ -156,6 +156,27 @@ export class GradeEngine {
                 return; // Skip remaining GPA-related logic for exemptions
             }
 
+            // Phase 12: Skip courses without a defined chronological term (General) from GPA
+            const termStr = (course.term && typeof course.term === 'object') ? course.term.term_raw : (course.term || 'General');
+            if (termStr === 'General') {
+                pendingCount++;
+                if (!suppressLog) console.log(`[Pending]  ${title.padEnd(30)} | Grade: ---  | Credits: ${nekaz} | (Term Missing - Skipped)`);
+                return; // Treat exactly like Pending
+            }
+
+            // Phase 12.1: Skip courses with null/undefined credits (data missing)
+            // NOTE: nekaz === 0 is a valid "Obligation" course and is also skipped from GPA math (can't weight with 0)
+            if (course.nekaz === null || course.nekaz === undefined) {
+                pendingCount++;
+                if (!suppressLog) console.log(`[Pending]  ${title.padEnd(30)} | Grade: ---  | Credits: null | (Credits Missing - Skipped)`);
+                return;
+            }
+            if (nekaz === 0) {
+                // 0-credit obligation: counts toward assigned credits, contributes nothing to GPA numerator/denominator
+                if (!suppressLog) console.log(`[Obligat]  ${title.padEnd(30)} | Grade: ${finalGrade !== null ? finalGrade : '---'} | Credits: 0   | (Obligation - Skipped from GPA)`);
+                return;
+            }
+
             if (finalGrade !== null) {
                 const isPassed = finalGrade >= (course.minPassGrade || GradeEngine.DEFAULT_MIN_PASS_GRADE);
 

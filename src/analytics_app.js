@@ -438,7 +438,26 @@ class AnalyticsApp {
             if (e.target === this.gradeModal) {
                 this.gradeModal.classList.remove('active');
             }
+            if (e.target === document.getElementById('resolution-modal')) {
+                document.getElementById('resolution-modal').classList.remove('active');
+            }
         });
+
+        const resolutionWidget = document.getElementById('resolution-widget');
+        if (resolutionWidget) {
+            resolutionWidget.addEventListener('click', () => {
+                if (resolutionWidget.classList.contains('resolution-widget')) {
+                    this.openResolutionModal();
+                }
+            });
+        }
+        
+        const closeResolutionBtn = document.getElementById('close-resolution-modal-btn');
+        if (closeResolutionBtn) {
+            closeResolutionBtn.addEventListener('click', () => {
+                document.getElementById('resolution-modal').classList.remove('active');
+            });
+        }
 
         // Critical Fix: Cross-tab Data Synchronization
         window.addEventListener('storage', (e) => {
@@ -947,21 +966,25 @@ class AnalyticsApp {
 
     async handleCourseSubmit() {
         const title = this.courseTitleInput.value.trim();
-        const nekazRaw = this.courseNekazInput.value;
+        const nekazRaw = this.courseNekazInput.value.trim();
         const gradeRaw = this.courseGradeInput ? this.courseGradeInput.value : '';
+        const termInput = document.getElementById('course-term');
+        const termRaw = termInput ? termInput.value.trim() : '';
         
         if (!title) return;
 
-        const nekaz = parseFloat(nekazRaw) || 0;
+        // Frictionless: blank/whitespace → null (Missing Data); "0" → Number(0) (valid Obligation)
+        const nekaz = nekazRaw === '' ? null : (isNaN(parseFloat(nekazRaw)) ? null : parseFloat(nekazRaw));
         const grade = gradeRaw !== '' ? parseFloat(gradeRaw) : null;
+        const term = termRaw !== '' ? termRaw : 'General';
 
         let normalizedTitle = CourseMatcher.normalize(title);
         let existingCourse = this.courses.find(c => CourseMatcher.normalize(c.title) === normalizedTitle);
         
         if (existingCourse) {
-            existingCourse.nekaz = nekaz;
+            if (nekaz !== null) existingCourse.nekaz = nekaz;
+            if (term !== 'General') existingCourse.term = term;
             if (grade !== null) {
-                // If a grade is provided manually, ensure a Final Grade component exists
                 if (!existingCourse.gradeComponents) existingCourse.gradeComponents = [];
                 let finalComp = existingCourse.gradeComponents.find(c => c.name.toLowerCase().includes('final'));
                 if (!finalComp) {
@@ -975,7 +998,9 @@ class AnalyticsApp {
             await storage.updateCourse(existingCourse);
             this.showToast(`✅ ${existingCourse.title} updated.`);
         } else {
-            const newCourse = { title, nekaz };
+            // Only title is strictly required; nekaz and term are resolved via Resolution Center
+            const newCourse = { title, term };
+            if (nekaz !== null) newCourse.nekaz = nekaz;
             if (grade !== null) {
                 newCourse.gradeComponents = [{ name: 'Final Grade', weight: 100, isShield: false, score: grade, minPassGrade: GradeEngine.DEFAULT_MIN_PASS_GRADE }];
                 newCourse.isConfigured = true;
@@ -1374,12 +1399,13 @@ class AnalyticsApp {
                     <div style="padding-left: ${this.isSelectionMode ? '16px' : '0'}; transition: padding 0.2s;">
                                 <h3 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 4px;">${this.escapeHTML(courseTitle)}</h3>
                                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                                    <span class="credit-badge-actionable" data-courseid="${course.id}" style="font-size: 0.85rem; color: var(--text-secondary);">
-                                        <i class='bx bx-coin-stack'></i> ${courseNekaz || 0} Nekaz
-                                    </span>
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
-                                        <i class='bx bx-time-five'></i> ${course.term && typeof course.term === 'object' ? this.escapeHTML(course.term.term_raw) : 'General'}
-                                    </span>
+                                    ${(course.nekaz === null || course.nekaz === undefined)
+                                        ? `<span class="warning-badge"><i class='bx bx-error-circle'></i> Missing Credits</span>`
+                                        : course.nekaz === 0
+                                            ? `<span class="obligation-badge"><i class='bx bx-shield'></i> Obligation</span>`
+                                            : `<span class="credit-badge-actionable" data-courseid="${course.id}" style="font-size: 0.85rem; color: var(--text-secondary);"><i class='bx bx-coin-stack'></i> ${courseNekaz} Nekaz</span>`
+                                    }
+                                    ${(() => { const ts = (course.term && typeof course.term === 'object') ? course.term.term_raw : (course.term || 'General'); return ts === 'General' ? `<span class="warning-badge"><i class='bx bx-time-five'></i> Missing Term</span>` : `<span style="font-size: 0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);"><i class='bx bx-time-five'></i> ${this.escapeHTML(ts)}</span>`; })()}
                                     ${gradeDisplay || ''}
                                 </div>
                             </div>
@@ -1672,8 +1698,36 @@ class AnalyticsApp {
             progressFill.style.width = `${percentage}%`;
         }
 
-        this.summaryPending.textContent = stats.pendingCount;
+        // Resolution Center: count TOTAL issues across all courses (not just unique courses)
+        const allIssues = this.getPendingIssues(coursesToRender);
+        const issueCount = allIssues.length;
+
+        this.summaryPending.textContent = issueCount;
         this.summaryCourses.textContent = stats.totalAssignedCredits.toFixed(1); // Phase 11: Show total credits
+
+        // Widget visual state: glow when issues exist, clear when resolved
+        const resolutionWidget = document.getElementById('resolution-widget');
+        const resolutionIconWrapper = document.getElementById('resolution-icon-wrapper');
+        const resolutionIcon = document.getElementById('resolution-icon');
+        const resolutionTitle = document.getElementById('resolution-title');
+
+        if (resolutionWidget && resolutionIconWrapper && resolutionIcon && resolutionTitle) {
+            if (issueCount === 0) {
+                resolutionWidget.style.cursor = 'default';
+                resolutionWidget.classList.remove('resolution-widget', 'resolution-widget--active');
+                resolutionIconWrapper.style.background = 'rgba(3, 218, 198, 0.1)';
+                resolutionIconWrapper.style.color = 'var(--secondary-color)';
+                resolutionIcon.className = 'bx bx-check-shield';
+                resolutionTitle.textContent = 'All Clear';
+            } else {
+                resolutionWidget.style.cursor = 'pointer';
+                resolutionWidget.classList.add('resolution-widget', 'resolution-widget--active');
+                resolutionIconWrapper.style.background = 'rgba(255, 152, 0, 0.1)';
+                resolutionIconWrapper.style.color = '#ff9800';
+                resolutionIcon.className = 'bx bx-error-circle';
+                resolutionTitle.textContent = 'Action Required';
+            }
+        }
 
         // Render the Trend Chart
         this.renderGPAChart(coursesToRender);
@@ -2267,6 +2321,156 @@ class AnalyticsApp {
         this.showToast(`Merging AI data into ${course.title}...`);
         await this.applyAgentResultsToCourse(course, payload);
         window.localStorage.removeItem('STUDENT_OS_PENDING_SYLLABUS');
+    }
+
+    getPendingIssues(courses) {
+        const issues = [];
+        courses.forEach(course => {
+            if (course.isExemption) return;
+
+            // Phase 2: Evaluate ALL conditions independently (no short-circuiting)
+            const grade = GradeEngine.calculateFinalGrade(course);
+            if (grade === null) {
+                issues.push({ courseId: course.id, title: course.title, issueType: 'MISSING_GRADE', currentData: course });
+            }
+
+            const termStr = (course.term && typeof course.term === 'object') ? course.term.term_raw : (course.term || 'General');
+            if (termStr === 'General') {
+                issues.push({ courseId: course.id, title: course.title, issueType: 'MISSING_TERM', currentData: course });
+            }
+
+            // Only flag missing if nekaz is strictly null/undefined — 0 is a valid "Obligation" course
+            if (course.nekaz === null || course.nekaz === undefined) {
+                issues.push({ courseId: course.id, title: course.title, issueType: 'MISSING_NEKAZ', currentData: course });
+            }
+        });
+        return issues;
+    }
+
+    openResolutionModal() {
+        const issues = this.getPendingIssues(this.courses);
+        const listContainer = document.getElementById('resolution-issues-list');
+        const emptyState = document.getElementById('resolution-empty-state');
+        const modal = document.getElementById('resolution-modal');
+        
+        listContainer.innerHTML = '';
+        
+        if (issues.length === 0) {
+            listContainer.style.display = 'none';
+            emptyState.style.display = 'block';
+        } else {
+            listContainer.style.display = 'flex';
+            emptyState.style.display = 'none';
+
+            // Phase 3: Group issues by type and render with section headers
+            const groups = [
+                { type: 'MISSING_GRADE',  label: '⚠️ Missing Grades',  color: '207,102,121',  badgeColor: '#cf6679' },
+                { type: 'MISSING_TERM',   label: '🗓 Missing Terms',    color: '255,183,77',   badgeColor: '#ffb74d' },
+                { type: 'MISSING_NEKAZ',  label: '📚 Missing Credits',  color: '100,181,246',  badgeColor: '#64b5f6' },
+            ];
+
+            groups.forEach(group => {
+                const groupIssues = issues.filter(i => i.issueType === group.type);
+                if (groupIssues.length === 0) return;
+
+                // Section header
+                listContainer.insertAdjacentHTML('beforeend',
+                    `<h4 class="issue-group-title">${group.label}</h4>`
+                );
+
+                groupIssues.forEach(issue => {
+                    // Use a compound key so multiple rows per course don't collide
+                    const rowId = `row-${issue.issueType}-${issue.courseId}`;
+                    const inputId = `input-${issue.issueType}-${issue.courseId}`;
+
+                    let inputHtml = '';
+                    if (issue.issueType === 'MISSING_GRADE') {
+                        inputHtml = `<input type="number" id="${inputId}" min="0" max="100" step="0.5" placeholder="Final Grade" class="resolution-input">`;
+                    } else if (issue.issueType === 'MISSING_TERM') {
+                        inputHtml = `<input type="text" id="${inputId}" placeholder="e.g. סמסטר א 2026" class="resolution-input" style="width:160px;">`;
+                    } else {
+                        inputHtml = `<input type="number" id="${inputId}" min="0" step="0.5" placeholder="Credits" class="resolution-input" style="width:90px;">`;
+                    }
+
+                    listContainer.insertAdjacentHTML('beforeend', `
+                        <div id="${rowId}" class="resolution-row">
+                            <div>
+                                <h4 style="font-size:0.95rem; color:var(--text-primary); margin-bottom:4px;">${this.escapeHTML(issue.title)}</h4>
+                                <span class="resolution-badge" style="background:rgba(${group.color},0.1); color:${group.badgeColor}; border-color:rgba(${group.color},0.3);">${group.label.replace(/^.{2}/,'').trim()}</span>
+                            </div>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                ${inputHtml}
+                                <button class="primary-btn resolve-issue-btn" data-courseid="${issue.courseId}" data-type="${issue.issueType}" data-rowid="${rowId}" data-inputid="${inputId}" style="padding:6px 12px; font-size:0.85rem;">Save</button>
+                            </div>
+                        </div>
+                    `);
+                });
+            });
+
+            // Bind all save buttons
+            listContainer.querySelectorAll('.resolve-issue-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const { courseid: courseId, type, rowid: rowId, inputid: inputId } = e.target.dataset;
+                    const inputEl = document.getElementById(inputId);
+                    const inputVal = inputEl ? inputEl.value.trim() : '';
+
+                    if (!inputVal) { inputEl?.focus(); return; }
+
+                    const course = this.courses.find(c => c.id === courseId);
+                    if (!course) return;
+
+                    if (type === 'MISSING_GRADE') {
+                        const grade = parseFloat(inputVal);
+                        if (isNaN(grade) || grade < 0 || grade > 100) {
+                            alert('Please enter a valid numerical grade between 0 and 100.');
+                            return;
+                        }
+                        if (!course.gradeComponents) course.gradeComponents = [];
+                        let finalComp = course.gradeComponents.find(c => c.name.toLowerCase().includes('final'));
+                        if (!finalComp) {
+                            course.gradeComponents.push({ name: 'Final Grade', weight: 100, isShield: false, score: grade, minPassGrade: GradeEngine.DEFAULT_MIN_PASS_GRADE });
+                        } else {
+                            finalComp.score = grade;
+                        }
+                        course.isConfigured = true;
+                    } else if (type === 'MISSING_TERM') {
+                        course.term = inputVal;
+                    } else if (type === 'MISSING_NEKAZ') {
+                        const nekaz = parseFloat(inputVal);
+                        if (isNaN(nekaz) || nekaz < 0) {
+                            alert('Please enter a valid positive number for credits.');
+                            return;
+                        }
+                        course.nekaz = nekaz;
+                    }
+
+                    // Reactive Purity: storage fires storage_updated natively
+                    await storage.updateCourse(course);
+                    // Also sync local array so in-modal removes are accurate
+                    const idx = this.courses.findIndex(c => c.id === courseId);
+                    if (idx > -1) this.courses[idx] = course;
+
+                    document.getElementById(rowId)?.remove();
+                    this.showToast(`✅ Updated ${course.title}`);
+
+                    // Remove orphaned group headers
+                    listContainer.querySelectorAll('.issue-group-title').forEach(hdr => {
+                        if (!hdr.nextElementSibling || hdr.nextElementSibling.classList.contains('issue-group-title')) {
+                            hdr.remove();
+                        }
+                    });
+
+                    // Empty state once all rows gone
+                    if (listContainer.querySelectorAll('.resolution-row').length === 0) {
+                        listContainer.style.display = 'none';
+                        emptyState.style.display = 'block';
+                        setTimeout(() => modal.classList.remove('active'), 2000);
+                    }
+                });
+            });
+        }
+
+        modal.classList.add('active');
     }
 }
 
