@@ -358,6 +358,26 @@ body.analytics-page .sidebar-link.active {
 }
 
 /* Compact Filter Bar Animations */
+.filter-btn {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.filter-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.filter-btn.active {
+    background: var(--primary-color);
+    color: #000;
+    border-color: var(--primary-color);
+    font-weight: 600;
+}
+
 .filter-label {
     transition: max-width 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
     overflow: hidden;

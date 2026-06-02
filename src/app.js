@@ -555,18 +555,23 @@ class App {
         const deleteSelectedBtn = document.getElementById('delete-selected-btn');
         if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', () => this.handleDeleteSelected());
 
-        // Time Filter Listeners
-        if (this.filterBtns) this.filterBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+        const filterBar = document.querySelector('.filter-bar');
+        if (filterBar) {
+            filterBar.addEventListener('click', (e) => {
+                const btn = e.target.closest('.filter-btn');
+                if (!btn) return;
+                
+                this.filterBtns = document.querySelectorAll('.filter-btn');
                 this.filterBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentFilter = btn.dataset.filter;
                 this.render();
             });
-        });
+        }
 
         if (this.applyCustomFilterBtn) this.applyCustomFilterBtn.addEventListener('click', () => {
             if (this.filterStartDate?.value || this.filterEndDate?.value) {
+                this.filterBtns = document.querySelectorAll('.filter-btn');
                 if (this.filterBtns) this.filterBtns.forEach(b => b.classList.remove('active')); // Deselect predefined
                 this.currentFilter = 'custom';
                 this.render();
@@ -1388,6 +1393,20 @@ class App {
 
     render() {
         try {
+            // Dynamic Moed Filters
+            const dynamicMoedContainer = document.getElementById('dynamic-moed-filters');
+            if (dynamicMoedContainer) {
+                const visibleExams = this.exams.filter(e => e.decisionState !== 'Vaulted');
+                const uniqueMoeds = [...new Set(visibleExams.map(e => e.moed).filter(m => m))].sort();
+                let moedHTML = '';
+                uniqueMoeds.forEach(moed => {
+                    const filterKey = `moed${moed.toLowerCase()}`;
+                    const isActive = this.currentFilter === filterKey ? 'active' : '';
+                    moedHTML += `<button class="filter-btn ${isActive}" data-filter="${filterKey}">Moed ${moed}</button>\n`;
+                });
+                dynamicMoedContainer.innerHTML = moedHTML;
+            }
+
             // Clear existing rendering intervals
             Object.values(this.countdownIntervals).forEach(clearInterval);
             this.countdownIntervals = {};
@@ -1472,10 +1491,9 @@ class App {
             // Phase 6.5: Filter out TBD exams from the main upcoming view
             let filteredExams = this.exams.filter(e => e.date !== 'TBD');
             
-            if (this.currentFilter === 'today') {
-                const tzOffset = (new Date()).getTimezoneOffset() * 60000;
-                const today = (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
-                filteredExams = filteredExams.filter(e => e.date === today);
+            if (this.currentFilter && this.currentFilter.startsWith('moed')) {
+                const targetMoed = this.currentFilter.replace('moed', '').toUpperCase();
+                filteredExams = filteredExams.filter(e => e.moed === targetMoed);
             } else if (this.currentFilter === 'week') {
                 const today = new Date();
                 today.setHours(0,0,0,0);

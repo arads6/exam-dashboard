@@ -89,9 +89,9 @@
             <!-- Time Filters Control Bar -->
             <div class="filter-bar" style="display: flex; gap: 12px; background: var(--surface-color); padding: 12px 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); border: 1px solid var(--border-color); margin-bottom: 24px; align-items: center;">
                 <span class="filter-label" style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; flex-shrink: 0; white-space: nowrap;"><i class='bx bx-filter'></i> Focus View:</span>
-                <button class="filter-btn active" data-filter="all" style="background: var(--primary-color); color: #000; border: none; padding: 6px 16px; border-radius: 20px; font-weight: 600; cursor: pointer;">All Upcoming</button>
-                <button class="filter-btn" data-filter="today" style="background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 16px; border-radius: 20px; font-weight: 500; cursor: pointer;">Today</button>
-                <button class="filter-btn" data-filter="week" style="background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); padding: 6px 16px; border-radius: 20px; font-weight: 500; cursor: pointer;">This Week</button>
+                <button class="filter-btn active" data-filter="all">All Upcoming</button>
+                <span id="dynamic-moed-filters" style="display: contents;"></span>
+                <button class="filter-btn" data-filter="week">This Week</button>
                 <div class="custom-range-picker" style="margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                     <input type="date" id="filter-start-date" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-primary); font-family: 'Inter';">
                     <span class="range-separator" style="color: var(--text-secondary)">to</span>
