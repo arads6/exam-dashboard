@@ -28,7 +28,8 @@
         "http://127.0.0.1:8080/*",
         "http://localhost/*",
         "http://127.0.0.1/*",
-        "file:///*"
+        "file:///*",
+        "https://arads6.github.io/*"
       ],
       "js": ["courier.js"]
     }
@@ -46,7 +47,8 @@
         "http://localhost:*/*",
         "http://127.0.0.1:*/*",
         "http://localhost/*",
-        "http://127.0.0.1/*"
+        "http://127.0.0.1/*",
+        "https://arads6.github.io/*"
       ],
       "use_dynamic_url": true
     }
