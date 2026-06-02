@@ -162,7 +162,10 @@ class GoogleSync {
             
             if (gEvent) {
                 // Check for updates
-                const isTitleSame = gEvent.summary === exam.title;
+                const moedMap = { 'A': "א'", 'B': "ב'", 'C': "ג'" };
+                const moedLabel = exam.moed ? (moedMap[exam.moed] || exam.moed) : '';
+                const expectedTitle = moedLabel ? `${exam.title} - מועד ${moedLabel}` : exam.title;
+                const isTitleSame = gEvent.summary === expectedTitle;
                 const isDateSame = this.isDateSame(gEvent, exam);
                 
                 status = (isTitleSame && isDateSame) ? 'SYNCED' : 'UPDATED';
@@ -274,8 +277,11 @@ class GoogleSync {
 
     prepareEventResource(exam) {
         // Default to All-Day unless time is explicitly set
+        const moedMap = { 'A': "א'", 'B': "ב'", 'C': "ג'" };
+        const moedLabel = exam.moed ? (moedMap[exam.moed] || exam.moed) : '';
+        const summaryTitle = moedLabel ? `${exam.title} - מועד ${moedLabel}` : exam.title;
         const resource = {
-            summary: exam.title,
+            summary: summaryTitle,
             description: `Student OS Exam Dashboard. Moed: ${exam.moed || 'N/A'}.`,
             id: exam.googleEventId || undefined // Only provide if updating, but gapi client handles update vs insert differently
         };
